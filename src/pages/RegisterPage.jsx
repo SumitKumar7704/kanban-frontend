@@ -1,5 +1,4 @@
 import { useState } from "react";
-import RegisterPage from "./RegisterPage.jsx";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import {
@@ -11,27 +10,32 @@ import {
   Typography,
 } from "@mui/material";
 
-function LoginPage() {
+function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
 
     try {
-      const res = await api.post("/auth/login", { username, password });
-      const { token, userId, isAdmin } = res.data;
-      localStorage.setItem("token", token);
-      localStorage.setItem("userId", userId);
-      localStorage.setItem("isAdmin", isAdmin);
-      localStorage.setItem("username", username);
-      navigate("/boards");
+      await api.post("/auth/register", {
+        username,
+        password,
+        fullName, // optional: remove if your User model doesn’t have it
+      });
+      setSuccess("Registration successful. You can now log in.");
+      setTimeout(() => navigate("/login"), 1000);
     } catch (err) {
-      console.error("login error", err.response || err);
-      setError("Login failed. Check username/password.");
+      console.error("register error", err.response || err);
+      setError(
+        err.response?.data?.message || "Registration failed. Try another username."
+      );
     }
   };
 
@@ -56,13 +60,23 @@ function LoginPage() {
       >
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" component="h2" gutterBottom>
-            Kanban Login
+            Create an Account
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Sign in to manage your boards and tasks.
+            Sign up to start using the Kanban board.
           </Typography>
 
           <Box component="form" onSubmit={handleSubmit} noValidate>
+            {/* Remove this block if your backend User doesn’t have fullName */}
+            <TextField
+              label="Full name"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              fullWidth
+              margin="normal"
+            />
+
             <TextField
               label="Username"
               type="text"
@@ -93,6 +107,16 @@ function LoginPage() {
               </Typography>
             )}
 
+            {success && (
+              <Typography
+                variant="body2"
+                color="success.main"
+                sx={{ mt: 1, mb: 1 }}
+              >
+                {success}
+              </Typography>
+            )}
+
             <Button
               type="submit"
               variant="contained"
@@ -104,7 +128,7 @@ function LoginPage() {
                 py: 1.2,
               }}
             >
-              Login
+              Register
             </Button>
 
             <Button
@@ -112,9 +136,9 @@ function LoginPage() {
               variant="text"
               fullWidth
               sx={{ mt: 1, textTransform: "none" }}
-              onClick={() => navigate("/register")}
+              onClick={() => navigate("/login")}
             >
-              New here? Create an account
+              Already have an account? Log in
             </Button>
           </Box>
         </CardContent>
@@ -123,4 +147,4 @@ function LoginPage() {
   );
 }
 
-export default LoginPage;
+export default RegisterPage;
