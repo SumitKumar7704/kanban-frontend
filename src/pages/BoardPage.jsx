@@ -19,6 +19,21 @@ import {
 } from "@mui/material";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "DONE"];
+const STATUS_COLORS = {
+  TODO: {
+    bg: "#E3F2FD",      // light blue
+    border: "#2196F3",
+  },
+  IN_PROGRESS: {
+    bg: "#FFF8E1",      // light amber
+    border: "#FF9800",
+  },
+  DONE: {
+    bg: "#E8F5E9",      // light green
+    border: "#4CAF50",
+  },
+};
+
 
 function BoardPage() {
   const { boardId } = useParams();
@@ -200,12 +215,18 @@ function BoardPage() {
         {...provided.dragHandleProps}
         elevation={1}
         sx={{
-          mb: 1.5,
-          p: 1.5,
-          borderRadius: 2,
-          bgcolor: "background.paper",
-          cursor: "grab",
-        }}
+  mb: 1.5,
+  p: 1.5,
+  borderRadius: 2,
+  cursor: "grab",
+  bgcolor: STATUS_COLORS[t.status].bg,
+  borderLeft: `6px solid ${STATUS_COLORS[t.status].border}`,
+  transition: "transform 0.1s ease, box-shadow 0.1s ease",
+  "&:hover": {
+    boxShadow: 3,
+    transform: "scale(1.01)",
+  },
+}}
       >
 
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
