@@ -15,7 +15,8 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        {token && <TopBar />}
+      <TopBar />
+        
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -27,7 +28,7 @@ function App() {
             path="/boards/:boardId"
             element={token ? <BoardPage /> : <Navigate to="/login" replace />}
           />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "../api";
 import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+} from "@hello-pangea/dnd";
+import {
   Box,
   Button,
   Card,
@@ -92,6 +97,27 @@ function BoardPage() {
       setError(msg); // will show WIP limit error here
     }
   };
+  const handleDragEnd = async (result) => {
+  const { destination, source, draggableId } = result;
+
+  // dropped outside
+  if (!destination) return;
+
+  // same position
+  if (
+    destination.droppableId === source.droppableId &&
+    destination.index === source.index
+  ) {
+    return;
+  }
+
+  try {
+    await handleChangeStatus(draggableId, destination.droppableId);
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 
   useEffect(() => {
     loadColumns();
@@ -128,9 +154,16 @@ function BoardPage() {
           </Typography>
         )}
 
-        <Grid container spacing={2} alignItems="flex-start">
+        <DragDropContext onDragEnd={handleDragEnd}>
+  <Grid container spacing={2} alignItems="flex-start">
           {STATUSES.map((status) => (
             <Grid item xs={12} md={4} key={status}>
+  <Droppable droppableId={status}>
+    {(provided) => (
+      <div
+        ref={provided.innerRef}
+        {...provided.droppableProps}
+      >
               <Card
                 elevation={2}
                 sx={{
@@ -158,17 +191,23 @@ function BoardPage() {
 
                   {/* Tasks list for this status */}
                   <Box sx={{ mt: 1 }}>
-                    {tasksByStatus[status].map((t) => (
-                      <Paper
-                        key={t.id}
-                        elevation={1}
-                        sx={{
-                          mb: 1.5,
-                          p: 1.5,
-                          borderRadius: 2,
-                          bgcolor: "background.paper",
-                        }}
-                      >
+                    {tasksByStatus[status].map((t, index) => (
+  <Draggable draggableId={String(t.id)} index={index} key={t.id}>
+    {(provided) => (
+      <Paper
+        ref={provided.innerRef}
+        {...provided.draggableProps}
+        {...provided.dragHandleProps}
+        elevation={1}
+        sx={{
+          mb: 1.5,
+          p: 1.5,
+          borderRadius: 2,
+          bgcolor: "background.paper",
+          cursor: "grab",
+        }}
+      >
+
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                           {t.title}
                         </Typography>
@@ -233,6 +272,9 @@ function BoardPage() {
                           </Stack>
                         )}
                       </Paper>
+    )}
+  </Draggable>
+
                     ))}
                     {tasksByStatus[status].length === 0 && (
                       <Typography
@@ -246,9 +288,14 @@ function BoardPage() {
                   </Box>
                 </CardContent>
               </Card>
+              {provided.placeholder}
+</div>
+)}
+</Droppable>
             </Grid>
           ))}
         </Grid>
+        </DragDropContext>
       </Box>
     </Box>
   );
