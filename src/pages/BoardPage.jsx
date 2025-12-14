@@ -326,6 +326,7 @@ function BoardPage() {
 function TaskQuickAdd({ onAdd }) {
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
+  const now = new Date().toISOString().slice(0, 16);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -351,15 +352,19 @@ function TaskQuickAdd({ onAdd }) {
         required
       />
       <TextField
-        type="datetime-local"
-        value={deadline}
-        onChange={(e) => setDeadline(e.target.value)}
-        fullWidth
-        size="small"
-        margin="dense"
-        required
-        InputLabelProps={{ shrink: true }}
-      />
+  type="datetime-local"
+  value={deadline}
+  onChange={(e) => setDeadline(e.target.value)}
+  fullWidth
+  size="small"
+  margin="dense"
+  required
+  InputLabelProps={{ shrink: true }}
+  inputProps={{
+    min: now,
+  }}
+/>
+
       <Button
         type="submit"
         variant="contained"
