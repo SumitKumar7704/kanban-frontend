@@ -5,7 +5,6 @@ import LoginPage from "./pages/LoginPage";
 import BoardListPage from "./pages/BoardListPage";
 import BoardPage from "./pages/BoardPage";
 import RegisterPage from "./pages/RegisterPage";
-// import the top bar
 import TopBar from "./components/TopBar";
 
 function App() {
@@ -15,10 +14,13 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        {token && <TopBar />}
+        {/* TopBar is always visible */}
+        <TopBar />
+
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+
           <Route
             path="/boards"
             element={token ? <BoardListPage /> : <Navigate to="/login" replace />}
@@ -27,6 +29,7 @@ function App() {
             path="/boards/:boardId"
             element={token ? <BoardPage /> : <Navigate to="/login" replace />}
           />
+
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>

@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import api from "../api";
 import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+} from "@hello-pangea/dnd";
+import {
   Box,
   Button,
   Card,
@@ -11,15 +16,34 @@ import {
   TextField,
   Paper,
   Stack,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+  Chip,
 } from "@mui/material";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "DONE"];
+
+const STATUS_COLORS = {
+  TODO: {
+    bg: "rgba(37, 99, 235, 0.12)",
+    border: "#60A5FA",
+  },
+  IN_PROGRESS: {
+    bg: "rgba(234, 179, 8, 0.15)",
+    border: "#FACC15",
+  },
+  DONE: {
+    bg: "rgba(34, 197, 94, 0.15)",
+    border: "#4ADE80",
+  },
+};
 
 function BoardPage() {
   const { boardId } = useParams();
   const currentUserId = localStorage.getItem("userId"); // logged-in user
   const isAdmin = localStorage.getItem("isAdmin") === "true";
-
   // Which user's board are we viewing? For now, same as logged in or from admin selection
   const activeUserId = localStorage.getItem("activeUserId") || currentUserId;
 
@@ -41,14 +65,21 @@ function BoardPage() {
   };
 
   // Admin: create task for activeUserId on this board (backend puts it into TODO)
-  const handleCreateTask = async ({ title, deadline }) => {
+  const handleCreateTask = async ({
+    title,
+    description,
+    deadline,
+    priority,
+  }) => {
     setError("");
     try {
       await api.post(
         "/tasks",
         {
           title,
-          deadline, // ISO string from <input type="datetime-local">
+          description,
+          deadline, // ISO string from datetime-local
+          priority, // "LOW" | "MEDIUM" | "HIGH"
         },
         {
           params: {
@@ -58,6 +89,7 @@ function BoardPage() {
           },
         }
       );
+
       await loadColumns(); // tasks are still embedded in columns
     } catch (err) {
       console.error("create task error", err.response || err);
@@ -93,6 +125,48 @@ function BoardPage() {
     }
   };
 
+  // User/admin: change task priority only
+  const handleChangePriority = async (taskId, newPriority) => {
+    setError("");
+    try {
+      await api.patch(
+        `/tasks/${taskId}`,
+        { priority: newPriority }, // matches TaskPriority enum
+        { params: { userId: activeUserId } }
+      );
+      await loadColumns();
+    } catch (err) {
+      console.error("update priority error", err.response || err);
+      const raw = err.response?.data;
+      const msg =
+        (typeof raw === "string"
+          ? raw
+          : raw?.message || raw?.error || JSON.stringify(raw)) ||
+        "Failed to update priority";
+      setError(msg);
+    }
+  };
+
+  const handleDragEnd = async (result) => {
+    const { destination, source, draggableId } = result;
+    // dropped outside
+    if (!destination) return;
+
+    // same position
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    try {
+      await handleChangeStatus(draggableId, destination.droppableId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     loadColumns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,173 +182,320 @@ function BoardPage() {
     DONE: allTasks.filter((t) => t.status === "DONE"),
   };
 
-  return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "grey.100",
-        py: 4,
-        px: 2,
-      }}
-    >
-      <Box sx={{ maxWidth: 1200, mx: "auto" }}>
-        <Typography variant="h5" component="h2" gutterBottom>
-          Board
-        </Typography>
+  const statusLabel = (status) => {
+    if (status === "TODO") return "To Do";
+    if (status === "IN_PROGRESS") return "In Progress";
+    return "Done";
+  };
 
-        {error && (
-          <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
-
-        <Grid container spacing={2} alignItems="flex-start">
-          {STATUSES.map((status) => (
-            <Grid item xs={12} md={4} key={status}>
-              <Card
-                elevation={2}
-                sx={{
-                  borderRadius: 3,
-                  bgcolor: "grey.50",
-                  minHeight: 200,
-                }}
-              >
-                <CardContent sx={{ p: 2 }}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ fontWeight: 600, mb: 1 }}
-                  >
-                    {status === "TODO"
-                      ? "To Do"
-                      : status === "IN_PROGRESS"
-                      ? "In Progress"
-                      : "Done"}
-                  </Typography>
-
-                  {/* Admin-only quick add always creates TODO tasks (leftmost column) */}
-                  {isAdmin && status === "TODO" && (
-                    <TaskQuickAdd onAdd={(data) => handleCreateTask(data)} />
-                  )}
-
-                  {/* Tasks list for this status */}
-                  <Box sx={{ mt: 1 }}>
-                    {tasksByStatus[status].map((t) => (
-                      <Paper
-                        key={t.id}
-                        elevation={1}
-                        sx={{
-                          mb: 1.5,
-                          p: 1.5,
-                          borderRadius: 2,
-                          bgcolor: "background.paper",
-                        }}
-                      >
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          {t.title}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: "block" }}
-                        >
-                          Status: {t.status}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: "block" }}
-                        >
-                          Assigned:{" "}
-                          {t.assignedAt
-                            ? new Date(t.assignedAt).toLocaleString()
-                            : "-"}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ display: "block", mb: 1 }}
-                        >
-                          Deadline:{" "}
-                          {t.deadline
-                            ? new Date(t.deadline).toLocaleString()
-                            : "-"}
-                        </Typography>
-
-                        {/* Only the board owner (activeUserId === currentUserId) can change status */}
-                        {activeUserId === currentUserId && (
-                          <Stack direction="row" spacing={1}>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() =>
-                                handleChangeStatus(t.id, "TODO")
-                              }
-                            >
-                              To Do
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() =>
-                                handleChangeStatus(t.id, "IN_PROGRESS")
-                              }
-                            >
-                              In Progress
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() =>
-                                handleChangeStatus(t.id, "DONE")
-                              }
-                            >
-                              Done
-                            </Button>
-                          </Stack>
-                        )}
-                      </Paper>
-                    ))}
-                    {tasksByStatus[status].length === 0 && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontStyle: "italic" }}
-                      >
-                        No tasks in this column.
-                      </Typography>
-                    )}
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-    </Box>
-  );
-}
-
-// small inline component for admin to add tasks (title + deadline)
-function TaskQuickAdd({ onAdd }) {
-  const [title, setTitle] = useState("");
-  const [deadline, setDeadline] = useState("");
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!title.trim() || !deadline) return;
-    onAdd({ title: title.trim(), deadline });
-    setTitle("");
-    setDeadline("");
+  const priorityColor = (priority) => {
+    switch (priority) {
+      case "HIGH":
+        return "error";
+      case "LOW":
+        return "info";
+      default:
+        return "warning";
+    }
   };
 
   return (
     <Box
+      px={5}
+      py={5}
+      minHeight="100vh"
+      sx={{
+        // slightly lighter overlay so the gradient behind is visible
+        background: "radial-gradient(circle at top left, #1d4ed8 0, rgba(15,23,42,0.85) 45%, #a855f7 90%)",
+      }}
+    >
+      <Box
+        mb={3}
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+      >
+        <Box>
+          <Typography variant="h4" fontWeight={700} sx={{ color: "#F9FAFB" }}>
+            Board
+          </Typography>
+          <Typography variant="body2" sx={{ color: "#E5E7EB" }}>
+            Drag tasks between columns, adjust priority, and watch WIP limits in action.
+          </Typography>
+        </Box>
+      </Box>
+
+      {error && (
+        <Box mb={2}>
+          <Paper
+            sx={{
+              p: 1.5,
+              bgcolor: "rgba(248, 113, 113, 0.12)",
+              border: "1px solid rgba(248, 113, 113, 0.7)",
+            }}
+          >
+            <Typography sx={{ color: "#FCA5A5" }} fontSize={14}>
+              {error}
+            </Typography>
+          </Paper>
+        </Box>
+      )}
+
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Grid container spacing={3}>
+          {STATUSES.map((status) => (
+            <Grid item xs={12} md={4} key={status}>
+              <Droppable droppableId={status}>
+                {(provided) => (
+                  <Box
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    sx={{
+                      bgcolor: "rgba(15,23,42,0.4)", // lighter than before
+                      borderRadius: 3,
+                      p: 2,
+                      minHeight: 280,
+                      border: `1px solid ${STATUS_COLORS[status].border}`,
+                      boxShadow: "0 12px 28px rgba(15,23,42,0.7)",
+                      position: "relative",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        inset: 0,
+                        opacity: 0.35,                 // more visible soft color
+                        background: STATUS_COLORS[status].bg,
+                        pointerEvents: "none",
+                      }}
+                    />
+                    <Box position="relative">
+                      <Typography
+                        variant="subtitle1"
+                        fontWeight={600}
+                        sx={{ mb: 1, color: "#F9FAFB" }}
+                      >
+                        {statusLabel(status)}
+                      </Typography>
+
+                      {isAdmin && status === "TODO" && (
+                        <TaskQuickAdd onAdd={handleCreateTask} />
+                      )}
+
+                      {tasksByStatus[status].map((t, index) => (
+                        <Draggable
+                          key={t.id}
+                          draggableId={t.id}
+                          index={index}
+                        >
+                          {(provided) => (
+                            <Card
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              sx={{
+                                mb: 1.4,
+                                bgcolor: "rgba(15,23,42,0.9)",
+                                color: "#F9FAFB",
+                              }}
+                            >
+                              <CardContent>
+                                <Stack
+                                  direction="row"
+                                  justifyContent="space-between"
+                                  alignItems="center"
+                                  mb={0.5}
+                                >
+                                  <Typography
+                                    variant="subtitle1"
+                                    fontWeight={600}
+                                  >
+                                    {t.title}
+                                  </Typography>
+                                  <Chip
+                                    size="small"
+                                    label={t.priority || "MEDIUM"}
+                                    color={priorityColor(t.priority || "MEDIUM")}
+                                    variant="outlined"
+                                  />
+                                </Stack>
+
+                                {t.description && (
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ mb: 0.5, color: "#E5E7EB" }}
+                                  >
+                                    {t.description}
+                                  </Typography>
+                                )}
+
+                                <Typography
+                                  variant="caption"
+                                  display="block"
+                                  sx={{ color: "#E5E7EB" }}
+                                >
+                                  Status: <strong>{statusLabel(t.status)}</strong>
+                                </Typography>
+
+                                <Typography
+                                  variant="caption"
+                                  display="block"
+                                  sx={{ color: "#E5E7EB" }}
+                                >
+                                  Assigned:{" "}
+                                  {t.assignedAt
+                                    ? new Date(t.assignedAt).toLocaleString()
+                                    : "-"}
+                                </Typography>
+
+                                <Typography
+                                  variant="caption"
+                                  display="block"
+                                  sx={{ color: "#E5E7EB" }}
+                                >
+                                  Deadline:{" "}
+                                  {t.deadline
+                                    ? new Date(t.deadline).toLocaleString()
+                                    : "-"}
+                                </Typography>
+
+                                <Stack
+                                  direction="row"
+                                  spacing={1}
+                                  mt={1.2}
+                                  alignItems="center"
+                                  flexWrap="wrap"
+                                >
+                                  {activeUserId === currentUserId && (
+                                    <>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        color="primary"
+                                        onClick={() =>
+                                          handleChangeStatus(t.id, "TODO")
+                                        }
+                                      >
+                                        To Do
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        color="secondary"
+                                        onClick={() =>
+                                          handleChangeStatus(
+                                            t.id,
+                                            "IN_PROGRESS"
+                                          )
+                                        }
+                                      >
+                                        In Progress
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        color="success"
+                                        onClick={() =>
+                                          handleChangeStatus(t.id, "DONE")
+                                        }
+                                      >
+                                        Done
+                                      </Button>
+                                    </>
+                                  )}
+
+                                  {activeUserId === currentUserId && (
+                                    <FormControl
+                                      size="small"
+                                      sx={{ minWidth: 110, ml: 1 }}
+                                    >
+                                      <InputLabel
+                                        id={`prio-${t.id}-label`}
+                                      >
+                                        Priority
+                                      </InputLabel>
+                                      <Select
+                                        labelId={`prio-${t.id}-label`}
+                                        value={t.priority || "MEDIUM"}
+                                        label="Priority"
+                                        onChange={(e) =>
+                                          handleChangePriority(
+                                            t.id,
+                                            e.target.value
+                                          )
+                                        }
+                                      >
+                                        <MenuItem value="LOW">Low</MenuItem>
+                                        <MenuItem value="MEDIUM">
+                                          Medium
+                                        </MenuItem>
+                                        <MenuItem value="HIGH">High</MenuItem>
+                                      </Select>
+                                    </FormControl>
+                                  )}
+                                </Stack>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </Draggable>
+                      ))}
+
+                      {tasksByStatus[status].length === 0 && (
+                        <Typography
+                          variant="body2"
+                          sx={{ mt: 1, color: "#E5E7EB" }}
+                        >
+                          No tasks in this column.
+                        </Typography>
+                      )}
+
+                      {provided.placeholder}
+                    </Box>
+                  </Box>
+                )}
+              </Droppable>
+            </Grid>
+          ))}
+        </Grid>
+      </DragDropContext>
+    </Box>
+  );
+}
+
+
+// small inline component for admin to add tasks (title + description + deadline + priority)
+function TaskQuickAdd({ onAdd }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [priority, setPriority] = useState("MEDIUM");
+
+  const now = new Date().toISOString().slice(0, 16);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim() || !description.trim() || !deadline) return;
+    onAdd({
+      title: title.trim(),
+      description: description.trim(),
+      deadline,
+      priority,
+    });
+    setTitle("");
+    setDescription("");
+    setDeadline("");
+    setPriority("MEDIUM");
+  };
+
+  return (
+    <Paper
+      sx={{ p: 1, mb: 1.2, bgcolor: "rgba(15,23,42,0.9)" }}
       component="form"
       onSubmit={handleSubmit}
-      sx={{ mb: 1.5, bgcolor: "grey.100", p: 1, borderRadius: 2 }}
     >
       <TextField
-        placeholder="New task title"
+        label="Task title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         fullWidth
@@ -283,6 +504,16 @@ function TaskQuickAdd({ onAdd }) {
         required
       />
       <TextField
+        label="Description"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        fullWidth
+        size="small"
+        margin="dense"
+        required
+      />
+      <TextField
+        label="Deadline"
         type="datetime-local"
         value={deadline}
         onChange={(e) => setDeadline(e.target.value)}
@@ -291,16 +522,34 @@ function TaskQuickAdd({ onAdd }) {
         margin="dense"
         required
         InputLabelProps={{ shrink: true }}
+        inputProps={{
+          min: now,
+        }}
       />
+      <FormControl fullWidth size="small" margin="dense">
+        <InputLabel id="quick-priority-label">Priority</InputLabel>
+        <Select
+          labelId="quick-priority-label"
+          value={priority}
+          label="Priority"
+          onChange={(e) => setPriority(e.target.value)}
+        >
+          <MenuItem value="LOW">Low</MenuItem>
+          <MenuItem value="MEDIUM">Medium</MenuItem>
+          <MenuItem value="HIGH">High</MenuItem>
+        </Select>
+      </FormControl>
+
       <Button
         type="submit"
         variant="contained"
+        size="small"
+        sx={{ mt: 1 }}
         fullWidth
-        sx={{ mt: 1, textTransform: "none", borderRadius: 2 }}
       >
         Add Task
       </Button>
-    </Box>
+    </Paper>
   );
 }
 

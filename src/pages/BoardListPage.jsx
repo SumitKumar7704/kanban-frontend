@@ -25,7 +25,6 @@ function BoardListPage() {
   const [users, setUsers] = useState([]);
 
   const navigate = useNavigate();
-
   const currentUserId = localStorage.getItem("userId");
   const isAdmin = localStorage.getItem("isAdmin") === "true";
 
@@ -49,6 +48,7 @@ function BoardListPage() {
       setError("No user id found. Please log in again.");
       return;
     }
+
     try {
       const res = await api.get(`/boards/user/${activeUserId}`);
       setBoards(res.data);
@@ -62,14 +62,18 @@ function BoardListPage() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setError("");
+
     if (!activeUserId) {
       setError("No user id found. Please log in again.");
       return;
     }
+
+    if (!name.trim()) return;
+
     try {
       await api.post(
         "/boards",
-        { name },
+        { name: name.trim() },
         { params: { userId: activeUserId } }
       );
       setName("");
@@ -97,50 +101,64 @@ function BoardListPage() {
 
   return (
     <Box
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "grey.100",
-        py: 6,
-        px: 2,
-      }}
+      minHeight="100vh"
+      px={10}
+      py={15}
+      display="flex"
+      justifyContent="center"
     >
-      <Card
-        elevation={3}
-        sx={{
-          maxWidth: 720,
-          mx: "auto",
-          borderRadius: 3,
-        }}
-      >
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" component="h2" gutterBottom>
-            Your Boards
-          </Typography>
+      <Box maxWidth="900px" width="100%">
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", md: "center" }}
+          spacing={3}
+          mb={3}
+        >
+          <Box>
+            <Typography variant="h4" fontWeight={700}>
+              Your boards
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Create boards for different projects and jump into their Kanban
+              views.
+            </Typography>
+          </Box>
 
           {isAdmin && (
-            <Box sx={{ mt: 2, mb: 3 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel id="user-select-label">Select user</InputLabel>
-                <Select
-                  labelId="user-select-label"
-                  value={activeUserId || ""}
-                  label="Select user"
-                  onChange={handleUserChange}
-                >
-                  {users.map((u) => (
-                    <MenuItem key={u.id} value={u.id}>
-                      {u.username}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
+            <FormControl
+              size="small"
+              sx={{ minWidth: 200, bgcolor: "rgba(15,23,42,0.9)", mt: { xs: 1, md: 0 } }}
+            >
+              <InputLabel id="user-select-label">Select user</InputLabel>
+              <Select
+                labelId="user-select-label"
+                value={activeUserId || ""}
+                label="Select user"
+                onChange={handleUserChange}
+              >
+                {users.map((u) => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {u.username}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           )}
+        </Stack>
 
-          <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>
-            <Stack direction="row" spacing={2}>
+        <Card elevation={10}>
+          <CardContent>
+            <Box
+              component="form"
+              onSubmit={handleCreate}
+              display="flex"
+              flexDirection={{ xs: "column", sm: "row" }}
+              gap={1.5}
+              mb={2}
+            >
               <TextField
-                placeholder="New board name"
+                label="New board name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -150,49 +168,81 @@ function BoardListPage() {
               <Button
                 type="submit"
                 variant="contained"
-                sx={{ textTransform: "none", borderRadius: 2 }}
+                color="primary"
+                sx={{
+                  minWidth: 140,
+                  py: 2,
+                  background:
+                    "linear-gradient(135deg, #696be0ff, #8b5cf6, #ec4899)",
+                  boxShadow: "0 12px 30px rgba(29, 45, 82, 0.8)",
+                  "&:hover": {
+                    background:
+                      "linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)",
+                  },
+                }}
               >
                 Create
               </Button>
-            </Stack>
-          </Box>
+            </Box>
 
-          {error && (
-            <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-              {error}
-            </Typography>
-          )}
-
-          <List
-            sx={{
-              mt: 1,
-              borderRadius: 2,
-              bgcolor: "grey.50",
-            }}
-          >
-            {boards.map((b) => (
-              <ListItemButton
-                key={b.id}
-                onClick={() => navigate(`/boards/${b.id}`)}
-                sx={{
-                  borderBottom: "1px solid",
-                  borderColor: "grey.200",
-                  "&:last-of-type": { borderBottom: "none" },
-                }}
+            {error && (
+              <Typography
+                variant="body2"
+                color="error"
+                sx={{ mb: 1.5 }}
               >
-                <ListItemText primary={b.name} />
-              </ListItemButton>
-            ))}
-            {boards.length === 0 && (
-              <Box sx={{ py: 2, px: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  No boards yet. Create one to get started.
-                </Typography>
-              </Box>
+                {error}
+              </Typography>
             )}
-          </List>
-        </CardContent>
-      </Card>
+
+            <List
+              sx={{
+                mt: 1,
+                borderRadius: 2,
+                overflow: "hidden",
+                bgcolor: "rgba(45, 61, 96, 0.9)",
+              }}
+            >
+              {boards.map((b, idx) => (
+                <ListItemButton
+                  key={b.id}
+                  onClick={() => navigate(`/boards/${b.id}`)}
+                  sx={{
+                    borderBottom:
+                      idx === boards.length - 1 ? "none" : "1px solid rgba(92, 115, 148, 0.4)",
+                    "&:hover": {
+                      bgcolor: "rgba(54, 90, 169, 0.12)",
+                    },
+                  }}
+                >
+                  <ListItemText
+                    primary={
+                      <Typography fontWeight={500}>{b.name}</Typography>
+                    }
+                    secondary={
+                      <Typography variant="caption" color="text.secondary">
+                        Click to open board
+                      </Typography>
+                    }
+                  />
+                </ListItemButton>
+              ))}
+
+              {boards.length === 0 && (
+                <Box p={2}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    align="center"
+                  >
+                    No boards yet. Create one to get started.
+                  </Typography>
+                </Box>
+              )}
+            </List>
+          </CardContent>
+        </Card>
+      </Box>
     </Box>
   );
 }
