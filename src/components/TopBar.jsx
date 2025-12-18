@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AppBar,
@@ -6,12 +7,23 @@ import {
   Box,
   Button,
   Stack,
+  IconButton,
+  Menu,
+  MenuItem,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
 
 function TopBar() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
   const username = localStorage.getItem("username") || "User";
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -34,6 +46,29 @@ function TopBar() {
     }
   };
 
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Shared actions as functions so we can reuse in buttons and menu
+  const handleBoardsClick = () => {
+    handleHome();
+    handleMenuClose();
+  };
+
+  const handleLoginClick = () => {
+    handleLogin();
+    handleMenuClose();
+  };
+
+  const handleLogoutClick = () => {
+    handleLogout();
+    handleMenuClose();
+  };
+
   return (
     <AppBar
       position="sticky"
@@ -43,12 +78,14 @@ function TopBar() {
         left: 0,
         right: 0,
         background:
-          "linear-gradient(90deg, rgba(15,23,42,0.95), rgba(30,64,175,0.85))",
-        borderBottom: "1px solid rgba(148,163,184,0.4)",
-        backdropFilter: "blur(18px)",
+          "linear-gradient(90deg, rgba(219,234,254,0.95), rgba(191,219,254,0.95))",
+        borderBottom: "1px solid rgba(148,163,184,0.6)",
+        backdropFilter: "blur(14px)",
+        color: "#111827",
       }}
     >
-      <Toolbar sx={{ minHeight: 64 }}>
+      <Toolbar sx={{ minHeight: 72, px: { xs: 2, sm: 3 } }}>
+        {/* Logo + title */}
         <Box
           sx={{
             display: "flex",
@@ -59,20 +96,21 @@ function TopBar() {
         >
           <Box
             sx={{
-              width: 28,
-              height: 28,
+              width: 30,
+              height: 30,
               borderRadius: "30%",
-              mr: 1.2,
+              mr: 1.4,
               background:
-                "conic-gradient(from 180deg at 50% 50%, #6366f1, #ec4899, #22c55e, #6366f1)",
-              boxShadow: "0 0 18px rgba(129,140,248,0.9)",
+                "conic-gradient(from 180deg at 50% 50%, #2563eb, #3b82f6, #60a5fa, #2563eb)",
+              boxShadow: "0 0 16px rgba(37,99,235,0.6)",
             }}
           />
           <Typography
             variant="h6"
             sx={{
-              fontWeight: 700,
-              letterSpacing: 0.5,
+              fontWeight: 800,
+              letterSpacing: 0.7,
+              fontSize: { xs: "1.05rem", sm: "1.15rem" },
             }}
           >
             My Work Planner
@@ -81,63 +119,124 @@ function TopBar() {
 
         <Box sx={{ flexGrow: 1 }} />
 
-        <Stack direction="row" spacing={2} alignItems="center">
-          {token && (
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ display: { xs: "none", sm: "block" } }}
-            >
-              Signed in as <strong>{username}</strong>
-            </Typography>
-          )}
+        {/* Desktop actions */}
+        {!isMobile && (
+          <Stack direction="row" spacing={2.5} alignItems="center">
+            {token && (
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                sx={{ fontWeight: 500 }}
+              >
+                Signed in as <strong>{username}</strong>
+              </Typography>
+            )}
 
-          <Button
-            color="inherit"
-            size="small"
-            onClick={handleHome}
-            sx={{ textTransform: "none" }}
-          >
-            Boards
-          </Button>
-
-          {token ? (
             <Button
-              variant="outlined"
               color="inherit"
-              size="small"
-              onClick={handleLogout}
+              size="medium"
+              onClick={handleHome}
               sx={{
                 textTransform: "none",
-                borderRadius: 999,
-                px: 2.5,
-                borderColor: "rgba(209,213,219,0.8)",
+                fontWeight: 600,
+                fontSize: "0.95rem",
               }}
             >
-              Logout
+              Boards
             </Button>
-          ) : (
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleLogin}
-              sx={{
-                textTransform: "none",
-                borderRadius: 999,
-                px: 2.5,
-                background:
-                  "linear-gradient(135deg, #6366f1, #8b5cf6, #ec4899)",
-                boxShadow: "0 10px 24px rgba(15,23,42,0.9)",
-                "&:hover": {
+
+            {token ? (
+              <Button
+                variant="outlined"
+                color="inherit"
+                size="medium"
+                onClick={handleLogout}
+                sx={{
+                  textTransform: "none",
+                  borderRadius: 999,
+                  px: 3,
+                  py: 0.7,
+                  fontWeight: 600,
+                  borderColor: "rgba(148,163,184,0.9)",
+                }}
+              >
+                Logout
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                size="medium"
+                onClick={handleLogin}
+                sx={{
+                  textTransform: "none",
+                  borderRadius: 999,
+                  px: 3,
+                  py: 0.7,
+                  fontWeight: 600,
                   background:
-                    "linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)",
-                },
+                    "linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa)",
+                  boxShadow: "0 8px 18px rgba(37,99,235,0.35)",
+                  "&:hover": {
+                    background:
+                      "linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)",
+                  },
+                }}
+              >
+                Login
+              </Button>
+            )}
+          </Stack>
+        )}
+
+        {/* Mobile hamburger menu */}
+        {isMobile && (
+          <>
+            <IconButton
+              edge="end"
+              color="inherit"
+              onClick={handleMenuOpen}
+              sx={{ ml: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+              anchorOrigin={{
+                vertical: "bottom",
+                horizontal: "right",
+              }}
+              transformOrigin={{
+                vertical: "top",
+                horizontal: "right",
               }}
             >
-              Login
-            </Button>
-          )}
-        </Stack>
+              {token && (
+                <MenuItem disabled dense>
+                  <Typography variant="body2">
+                    Signed in as <strong>{username}</strong>
+                  </Typography>
+                </MenuItem>
+              )}
+
+              <MenuItem onClick={handleBoardsClick}>
+                <Typography>Boards</Typography>
+              </MenuItem>
+
+              {token ? (
+                <MenuItem onClick={handleLogoutClick}>
+                  <Typography>Logout</Typography>
+                </MenuItem>
+              ) : (
+                <MenuItem onClick={handleLoginClick}>
+                  <Typography>Login</Typography>
+                </MenuItem>
+              )}
+            </Menu>
+          </>
+        )}
       </Toolbar>
     </AppBar>
   );

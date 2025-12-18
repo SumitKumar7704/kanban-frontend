@@ -1,6 +1,7 @@
-/* src/index.css */
+
 :root {
-  --bg-gradient: radial-gradient(circle at top left, #1d4ed8, #0f172a 45%, #a855f7 80%);
+
+  --bg-gradient: linear-gradient(135deg, #e0f2fe, #eff6ff);
 }
 
 body {
@@ -10,7 +11,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg-gradient);
-  color: #e5e7eb;
+  color: #111827;
   overflow-x: hidden;
 }
 
@@ -22,7 +23,7 @@ body::after {
   width: 520px;
   height: 520px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(96, 165, 250, 0.9), transparent 60%);
+  background: radial-gradient(circle, rgba(191, 219, 254, 0.9), transparent 60%);
   filter: blur(50px);
   z-index: -2;
   animation: floatBlob 30s infinite alternate ease-in-out;
@@ -32,7 +33,7 @@ body::after {
   top: auto;
   bottom: -180px;
   right: -80px;
-  background: radial-gradient(circle, rgba(236, 72, 153, 0.85), transparent 60%);
+  background: radial-gradient(circle, rgba(219, 234, 254, 0.9), transparent 60%);
   animation-duration: 26s;
 }
 
@@ -55,9 +56,9 @@ body::after {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(229, 231, 235, 0.9);
 }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #6366f1, #ec4899);
+  background: linear-gradient(180deg, #2563eb, #60a5fa);
   border-radius: 999px;
 }

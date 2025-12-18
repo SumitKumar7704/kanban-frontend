@@ -102,10 +102,13 @@ function BoardListPage() {
   return (
     <Box
       minHeight="100vh"
-      px={10}
-      py={15}
+      px={4}
+      py={6}
       display="flex"
       justifyContent="center"
+      sx={{
+        background: "linear-gradient(135deg, #e0f2fe, #eff6ff)",
+      }}
     >
       <Box maxWidth="900px" width="100%">
         <Stack
@@ -128,7 +131,11 @@ function BoardListPage() {
           {isAdmin && (
             <FormControl
               size="small"
-              sx={{ minWidth: 200, bgcolor: "rgba(15,23,42,0.9)", mt: { xs: 1, md: 0 } }}
+              sx={{
+                minWidth: 220,
+                mt: { xs: 1, md: 0 },
+                bgcolor: "rgba(255,255,255,0.9)",
+              }}
             >
               <InputLabel id="user-select-label">Select user</InputLabel>
               <Select
@@ -147,7 +154,13 @@ function BoardListPage() {
           )}
         </Stack>
 
-        <Card elevation={10}>
+        <Card
+          elevation={6}
+          sx={{
+            borderRadius: 3,
+            boxShadow: "0 18px 40px rgba(148,163,184,0.35)",
+          }}
+        >
           <CardContent>
             <Box
               component="form"
@@ -171,13 +184,14 @@ function BoardListPage() {
                 color="primary"
                 sx={{
                   minWidth: 140,
-                  py: 2,
+                  py: 1.2,
                   background:
-                    "linear-gradient(135deg, #696be0ff, #8b5cf6, #ec4899)",
-                  boxShadow: "0 12px 30px rgba(29, 45, 82, 0.8)",
+                    "linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa)",
+                  boxShadow: "0 10px 24px rgba(37,99,235,0.35)",
                   "&:hover": {
                     background:
-                      "linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)",
+                      "linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)",
+                    boxShadow: "0 12px 28px rgba(30,64,175,0.45)",
                   },
                 }}
               >
@@ -186,11 +200,7 @@ function BoardListPage() {
             </Box>
 
             {error && (
-              <Typography
-                variant="body2"
-                color="error"
-                sx={{ mb: 1.5 }}
-              >
+              <Typography variant="body2" color="error" sx={{ mb: 1.5 }}>
                 {error}
               </Typography>
             )}
@@ -200,7 +210,8 @@ function BoardListPage() {
                 mt: 1,
                 borderRadius: 2,
                 overflow: "hidden",
-                bgcolor: "rgba(45, 61, 96, 0.9)",
+                bgcolor: "rgba(255,255,255,0.95)",
+                border: "1px solid rgba(148,163,184,0.4)",
               }}
             >
               {boards.map((b, idx) => (
@@ -209,9 +220,11 @@ function BoardListPage() {
                   onClick={() => navigate(`/boards/${b.id}`)}
                   sx={{
                     borderBottom:
-                      idx === boards.length - 1 ? "none" : "1px solid rgba(92, 115, 148, 0.4)",
+                      idx === boards.length - 1
+                        ? "none"
+                        : "1px solid rgba(209,213,219,0.8)",
                     "&:hover": {
-                      bgcolor: "rgba(54, 90, 169, 0.12)",
+                      bgcolor: "rgba(191, 219, 254, 0.4)",
                     },
                   }}
                 >

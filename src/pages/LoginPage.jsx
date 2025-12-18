@@ -54,26 +54,27 @@ function LoginPage() {
       <Grid container maxWidth="md" spacing={10} alignItems="center">
         <Grid item xs={12} md={6}>
           <Typography
-            variant="h3"
-            fontWeight={700}
-            gutterBottom
-            sx={{
-              background:
-                "linear-gradient(135deg, #6366f1 0%, #ec4899 40%, #22c55e 90%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            Welcome back
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-            Sign in to see your boards, track tasks, and keep work flowing
-            across your Kanban columns.
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Use the admin account to assign work, or a user account to focus on
-            completing tasks efficiently.
-          </Typography>
+  variant="h3"
+  fontWeight={700}
+  gutterBottom
+  sx={{
+    background:
+      "linear-gradient(135deg, #2563eb 0%, #60a5fa 40%, #93c5fd 90%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+  }}
+>
+  Welcome back
+</Typography>
+<Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+  Sign in to see your boards, track tasks, and keep work flowing
+  across your Kanban columns.
+</Typography>
+<Typography variant="body2" color="text.secondary">
+  Sign in with your account to access your boards and tasks in a clean,
+  focused workspace.
+</Typography>
+
         </Grid>
 
         <Grid item xs={12} md={6}>
@@ -115,30 +116,32 @@ function LoginPage() {
                   </Typography>
                 )}
 
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  sx={{
-                    mt: 2,
-                    py: 1.1,
-                    background:
-                      "linear-gradient(135deg, #6366f1, #8b5cf6, #ec4899)",
-                    boxShadow: "0 12px 30px rgba(15,23,42,0.8)",
-                    "&:hover": {
-                      background:
-                        "linear-gradient(135deg, #4f46e5, #7c3aed, #db2777)",
-                    },
-                  }}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <CircularProgress size={22} color="inherit" />
-                  ) : (
-                    "Login"
-                  )}
-                </Button>
+              <Button
+  type="submit"
+  variant="contained"
+  color="primary"
+  fullWidth
+  sx={{
+    mt: 2,
+    py: 1.1,
+    background:
+      "linear-gradient(135deg, #2563eb, #3b82f6, #60a5fa)",
+    boxShadow: "0 10px 24px rgba(37, 99, 235, 0.35)",
+    "&:hover": {
+      background:
+        "linear-gradient(135deg, #1d4ed8, #2563eb, #3b82f6)",
+      boxShadow: "0 12px 28px rgba(30, 64, 175, 0.45)",
+    },
+  }}
+  disabled={loading}
+>
+  {loading ? (
+    <CircularProgress size={22} color="inherit" />
+  ) : (
+    "Login"
+  )}
+</Button>
+
 
                 <Typography
                   variant="body2"

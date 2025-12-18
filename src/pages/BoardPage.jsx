@@ -11,7 +11,6 @@ import {
   Button,
   Card,
   CardContent,
-  Grid,
   Typography,
   TextField,
   Paper,
@@ -27,23 +26,25 @@ const STATUSES = ["TODO", "IN_PROGRESS", "DONE"];
 
 const STATUS_COLORS = {
   TODO: {
-    bg: "rgba(37, 99, 235, 0.12)",
+    bg: "rgba(191, 219, 254, 0.6)",
     border: "#60A5FA",
   },
   IN_PROGRESS: {
-    bg: "rgba(234, 179, 8, 0.15)",
+    bg: "rgba(254, 240, 138, 0.65)",
     border: "#FACC15",
   },
   DONE: {
-    bg: "rgba(34, 197, 94, 0.15)",
+    bg: "rgba(187, 247, 208, 0.65)",
     border: "#4ADE80",
   },
 };
 
 function BoardPage() {
   const { boardId } = useParams();
+
   const currentUserId = localStorage.getItem("userId"); // logged-in user
   const isAdmin = localStorage.getItem("isAdmin") === "true";
+
   // Which user's board are we viewing? For now, same as logged in or from admin selection
   const activeUserId = localStorage.getItem("activeUserId") || currentUserId;
 
@@ -79,7 +80,7 @@ function BoardPage() {
           title,
           description,
           deadline, // ISO string from datetime-local
-          priority, // "LOW" | "MEDIUM" | "HIGH"
+          priority, // backend will default to LOW if this is null
         },
         {
           params: {
@@ -109,7 +110,7 @@ function BoardPage() {
     try {
       await api.patch(
         `/tasks/${taskId}`,
-        { status: newStatus },
+        { status: newStatus }, // ONLY status – priority untouched
         { params: { userId: activeUserId } }
       );
       await loadColumns();
@@ -151,7 +152,6 @@ function BoardPage() {
     const { destination, source, draggableId } = result;
     // dropped outside
     if (!destination) return;
-
     // same position
     if (
       destination.droppableId === source.droppableId &&
@@ -159,7 +159,6 @@ function BoardPage() {
     ) {
       return;
     }
-
     try {
       await handleChangeStatus(draggableId, destination.droppableId);
     } catch (err) {
@@ -188,314 +187,321 @@ function BoardPage() {
     return "Done";
   };
 
-  const priorityColor = (priority) => {
-    switch (priority) {
-      case "HIGH":
-        return "error";
-      case "LOW":
-        return "info";
-      default:
-        return "warning";
-    }
-  };
-
   return (
     <Box
-      px={5}
-      py={5}
-      minHeight="100vh"
       sx={{
-        // slightly lighter overlay so the gradient behind is visible
-        background: "radial-gradient(circle at top left, #1d4ed8 0, rgba(15,23,42,0.85) 45%, #a855f7 90%)",
+        minHeight: "100vh",
+        px: 2,
+        py: 3,
+        background: "linear-gradient(135deg, #e0f2fe, #eff6ff)",
       }}
     >
-      <Box
-        mb={3}
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <Box>
-          <Typography variant="h4" fontWeight={700} sx={{ color: "#F9FAFB" }}>
-            Board
-          </Typography>
-          <Typography variant="body2" sx={{ color: "#E5E7EB" }}>
-            Drag tasks between columns, adjust priority, and watch WIP limits in action.
-          </Typography>
-        </Box>
-      </Box>
+      <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
+        Board
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Drag tasks between columns, adjust priority, and watch WIP limits in
+        action.
+      </Typography>
 
       {error && (
-        <Box mb={2}>
-          <Paper
-            sx={{
-              p: 1.5,
-              bgcolor: "rgba(248, 113, 113, 0.12)",
-              border: "1px solid rgba(248, 113, 113, 0.7)",
-            }}
-          >
-            <Typography sx={{ color: "#FCA5A5" }} fontSize={14}>
-              {error}
-            </Typography>
-          </Paper>
-        </Box>
+        <Typography color="error" variant="body2" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
       )}
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <Grid container spacing={3}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          alignItems="flex-start"
+        >
           {STATUSES.map((status) => (
-            <Grid item xs={12} md={4} key={status}>
-              <Droppable droppableId={status}>
-                {(provided) => (
-                  <Box
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    sx={{
-                      bgcolor: "rgba(15,23,42,0.4)", // lighter than before
-                      borderRadius: 3,
-                      p: 2,
-                      minHeight: 280,
-                      border: `1px solid ${STATUS_COLORS[status].border}`,
-                      boxShadow: "0 12px 28px rgba(15,23,42,0.7)",
-                      position: "relative",
-                      overflow: "hidden",
-                    }}
+            <Droppable droppableId={status} key={status}>
+              {(provided) => (
+                <Paper
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  sx={{
+                    flex: 1,
+                    p: 2,
+                    borderRadius: 3,
+                    backgroundColor: STATUS_COLORS[status].bg,
+                    border: `1px solid ${STATUS_COLORS[status].border}`,
+                    boxShadow: "0 10px 24px rgba(148, 163, 184, 0.35)",
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    sx={{ mb: 1.5 }}
                   >
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        inset: 0,
-                        opacity: 0.35,                 // more visible soft color
-                        background: STATUS_COLORS[status].bg,
-                        pointerEvents: "none",
-                      }}
+                    <Typography variant="h6">
+                      {statusLabel(status)}
+                    </Typography>
+                    <Chip
+                      label={`${tasksByStatus[status].length} tasks`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
                     />
-                    <Box position="relative">
-                      <Typography
-                        variant="subtitle1"
-                        fontWeight={600}
-                        sx={{ mb: 1, color: "#F9FAFB" }}
-                      >
-                        {statusLabel(status)}
-                      </Typography>
+                  </Stack>
 
-                      {isAdmin && status === "TODO" && (
-                        <TaskQuickAdd onAdd={handleCreateTask} />
-                      )}
-
-                      {tasksByStatus[status].map((t, index) => (
-                        <Draggable
-                          key={t.id}
-                          draggableId={t.id}
-                          index={index}
+                  {/* Admin-only quick add always creates TODO tasks (leftmost column) */}
+                  {isAdmin && status === "TODO" && (
+                    <Card
+                      variant="outlined"
+                      sx={{
+                        mb: 2,
+                        borderRadius: 2,
+                        borderColor: "rgba(148, 163, 184, 0.5)",
+                        backgroundColor: "rgba(255, 255, 255, 0.9)",
+                      }}
+                    >
+                      <CardContent sx={{ p: 1.5 }}>
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          sx={{ mb: 1 }}
                         >
-                          {(provided) => (
-                            <Card
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
+                          Quick add task
+                        </Typography>
+                        <TaskQuickAdd onAdd={handleCreateTask} />
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Tasks list for this status */}
+                  {tasksByStatus[status].map((t, index) => (
+                    <Draggable
+                      key={t.id}
+                      draggableId={String(t.id)}
+                      index={index}
+                    >
+                      {(provided) => (
+                        <Card
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          sx={{
+                            mb: 1.5,
+                            borderRadius: 2,
+                            boxShadow:
+                              "0 8px 18px rgba(148, 163, 184, 0.45)",
+                            background:
+                              t.priority === "HIGH"
+                                ? "linear-gradient(135deg, #fee2e2, #fecaca)"
+                                : t.priority === "LOW"
+                                ? "linear-gradient(135deg, #dbeafe, #bfdbfe)"
+                                : "linear-gradient(135deg, #ffedd5, #fed7aa)",
+                            border:
+                              t.priority === "HIGH"
+                                ? "1px solid #e11d48"
+                                : t.priority === "LOW"
+                                ? "1px solid #2563eb"
+                                : "1px solid #ea580c",
+                          }}
+                        >
+                          <CardContent sx={{ p: 1.5 }}>
+                            <Box
                               sx={{
-                                mb: 1.4,
-                                bgcolor: "rgba(15,23,42,0.9)",
-                                color: "#F9FAFB",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                mb: 0.5,
                               }}
                             >
-                              <CardContent>
-                                <Stack
-                                  direction="row"
-                                  justifyContent="space-between"
-                                  alignItems="center"
-                                  mb={0.5}
-                                >
-                                  <Typography
-                                    variant="subtitle1"
-                                    fontWeight={600}
-                                  >
-                                    {t.title}
-                                  </Typography>
-                                  <Chip
-                                    size="small"
-                                    label={t.priority || "MEDIUM"}
-                                    color={priorityColor(t.priority || "MEDIUM")}
-                                    variant="outlined"
-                                  />
-                                </Stack>
+                              <Typography
+                                variant="subtitle1"
+                                fontWeight={600}
+                                sx={{ mr: 1 }}
+                              >
+                                {t.title}
+                              </Typography>
 
-                                {t.description && (
-                                  <Typography
-                                    variant="body2"
-                                    sx={{ mb: 0.5, color: "#E5E7EB" }}
-                                  >
-                                    {t.description}
-                                  </Typography>
-                                )}
+                              {/* Priority chip: HIGH=red, MEDIUM=orange, LOW=blue */}
+                              <Chip
+                                label={(t.priority || "MEDIUM").toLowerCase()}
+                                size="medium"
+                                sx={{
+                                  textTransform: "uppercase",
+                                  fontWeight: 700,
+                                  fontSize: "0.7rem",
+                                  px: 1.5,
+                                  py: 0.4,
+                                  borderRadius: 999,
+                                  bgcolor:
+                                    t.priority === "HIGH"
+                                      ? "#fee2e2" // light red bg
+                                      : t.priority === "LOW"
+                                      ? "#dbeafe" // light blue bg
+                                      : "#ffedd5", // light orange bg
+                                  color:
+                                    t.priority === "HIGH"
+                                      ? "#e20e0e" // red
+                                      : t.priority === "LOW"
+                                      ? "#1d4ed8" // blue
+                                      : "#c2410c", // orange
+                                  boxShadow:
+                                    "0 0 0 1px rgba(148,163,184,0.4)",
+                                }}
+                              />
+                            </Box>
 
-                                <Typography
-                                  variant="caption"
-                                  display="block"
-                                  sx={{ color: "#E5E7EB" }}
-                                >
-                                  Status: <strong>{statusLabel(t.status)}</strong>
-                                </Typography>
+                            {t.description && (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ mb: 0.5 }}
+                              >
+                                {t.description}
+                              </Typography>
+                            )}
 
-                                <Typography
-                                  variant="caption"
-                                  display="block"
-                                  sx={{ color: "#E5E7EB" }}
-                                >
-                                  Assigned:{" "}
-                                  {t.assignedAt
-                                    ? new Date(t.assignedAt).toLocaleString()
-                                    : "-"}
-                                </Typography>
+                            <Typography variant="caption" display="block">
+                              Status: {statusLabel(t.status)}
+                            </Typography>
+                            <Typography variant="caption" display="block">
+                              Assigned:{" "}
+                              {t.assignedAt
+                                ? new Date(
+                                    t.assignedAt
+                                  ).toLocaleString()
+                                : "-"}
+                            </Typography>
+                            <Typography variant="caption" display="block">
+                              Deadline:{" "}
+                              {t.deadline
+                                ? new Date(
+                                    t.deadline
+                                  ).toLocaleString()
+                                : "-"}
+                            </Typography>
 
-                                <Typography
-                                  variant="caption"
-                                  display="block"
-                                  sx={{ color: "#E5E7EB" }}
-                                >
-                                  Deadline:{" "}
-                                  {t.deadline
-                                    ? new Date(t.deadline).toLocaleString()
-                                    : "-"}
-                                </Typography>
-
+                            {/* Only the board owner can change status */}
+                            {activeUserId === currentUserId && (
+                              <>
                                 <Stack
                                   direction="row"
                                   spacing={1}
-                                  mt={1.2}
-                                  alignItems="center"
-                                  flexWrap="wrap"
+                                  sx={{ mt: 1 }}
                                 >
-                                  {activeUserId === currentUserId && (
-                                    <>
-                                      <Button
-                                        size="small"
-                                        variant="outlined"
-                                        color="primary"
-                                        onClick={() =>
-                                          handleChangeStatus(t.id, "TODO")
-                                        }
-                                      >
-                                        To Do
-                                      </Button>
-                                      <Button
-                                        size="small"
-                                        variant="outlined"
-                                        color="secondary"
-                                        onClick={() =>
-                                          handleChangeStatus(
-                                            t.id,
-                                            "IN_PROGRESS"
-                                          )
-                                        }
-                                      >
-                                        In Progress
-                                      </Button>
-                                      <Button
-                                        size="small"
-                                        variant="outlined"
-                                        color="success"
-                                        onClick={() =>
-                                          handleChangeStatus(t.id, "DONE")
-                                        }
-                                      >
-                                        Done
-                                      </Button>
-                                    </>
-                                  )}
-
-                                  {activeUserId === currentUserId && (
-                                    <FormControl
-                                      size="small"
-                                      sx={{ minWidth: 110, ml: 1 }}
-                                    >
-                                      <InputLabel
-                                        id={`prio-${t.id}-label`}
-                                      >
-                                        Priority
-                                      </InputLabel>
-                                      <Select
-                                        labelId={`prio-${t.id}-label`}
-                                        value={t.priority || "MEDIUM"}
-                                        label="Priority"
-                                        onChange={(e) =>
-                                          handleChangePriority(
-                                            t.id,
-                                            e.target.value
-                                          )
-                                        }
-                                      >
-                                        <MenuItem value="LOW">Low</MenuItem>
-                                        <MenuItem value="MEDIUM">
-                                          Medium
-                                        </MenuItem>
-                                        <MenuItem value="HIGH">High</MenuItem>
-                                      </Select>
-                                    </FormControl>
-                                  )}
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() =>
+                                      handleChangeStatus(t.id, "TODO")
+                                    }
+                                  >
+                                    To Do
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() =>
+                                      handleChangeStatus(
+                                        t.id,
+                                        "IN_PROGRESS"
+                                      )
+                                    }
+                                  >
+                                    In Progress
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() =>
+                                      handleChangeStatus(t.id, "DONE")
+                                    }
+                                  >
+                                    Done
+                                  </Button>
                                 </Stack>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </Draggable>
-                      ))}
 
-                      {tasksByStatus[status].length === 0 && (
-                        <Typography
-                          variant="body2"
-                          sx={{ mt: 1, color: "#E5E7EB" }}
-                        >
-                          No tasks in this column.
-                        </Typography>
+                                {/* Priority dropdown: user/admin explicitly changes priority */}
+                                <FormControl
+                                  fullWidth
+                                  size="small"
+                                  sx={{ mt: 1 }}
+                                >
+                                  <InputLabel>Priority</InputLabel>
+                                  <Select
+                                    label="Priority"
+                                    value={t.priority || "MEDIUM"}
+                                    onChange={(e) =>
+                                      handleChangePriority(
+                                        t.id,
+                                        e.target.value
+                                      )
+                                    }
+                                  >
+                                    <MenuItem value="LOW">Low</MenuItem>
+                                    <MenuItem value="MEDIUM">
+                                      Medium
+                                    </MenuItem>
+                                    <MenuItem value="HIGH">High</MenuItem>
+                                  </Select>
+                                </FormControl>
+                              </>
+                            )}
+                          </CardContent>
+                        </Card>
                       )}
+                    </Draggable>
+                  ))}
 
-                      {provided.placeholder}
-                    </Box>
-                  </Box>
-                )}
-              </Droppable>
-            </Grid>
+                  {tasksByStatus[status].length === 0 && (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mt: 1 }}
+                    >
+                      No tasks in this column.
+                    </Typography>
+                  )}
+
+                  {provided.placeholder}
+                </Paper>
+              )}
+            </Droppable>
           ))}
-        </Grid>
+        </Stack>
       </DragDropContext>
     </Box>
   );
 }
-
 
 // small inline component for admin to add tasks (title + description + deadline + priority)
 function TaskQuickAdd({ onAdd }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
-  const [priority, setPriority] = useState("MEDIUM");
+  const [priority, setPriority] = useState("LOW"); // default LOW in UI
 
   const now = new Date().toISOString().slice(0, 16);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!title.trim() || !description.trim() || !deadline) return;
+
     onAdd({
       title: title.trim(),
       description: description.trim(),
       deadline,
-      priority,
+      priority, // will be LOW by default if admin does nothing
     });
+
     setTitle("");
     setDescription("");
     setDeadline("");
-    setPriority("MEDIUM");
+    setPriority("LOW"); // reset to LOW
   };
 
   return (
-    <Paper
-      sx={{ p: 1, mb: 1.2, bgcolor: "rgba(15,23,42,0.9)" }}
-      component="form"
-      onSubmit={handleSubmit}
-    >
+    <Box component="form" onSubmit={handleSubmit} noValidate>
       <TextField
-        label="Task title"
+        label="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         fullWidth
@@ -503,6 +509,7 @@ function TaskQuickAdd({ onAdd }) {
         margin="dense"
         required
       />
+
       <TextField
         label="Description"
         value={description}
@@ -512,6 +519,7 @@ function TaskQuickAdd({ onAdd }) {
         margin="dense"
         required
       />
+
       <TextField
         label="Deadline"
         type="datetime-local"
@@ -526,12 +534,12 @@ function TaskQuickAdd({ onAdd }) {
           min: now,
         }}
       />
+
       <FormControl fullWidth size="small" margin="dense">
-        <InputLabel id="quick-priority-label">Priority</InputLabel>
+        <InputLabel>Priority</InputLabel>
         <Select
-          labelId="quick-priority-label"
-          value={priority}
           label="Priority"
+          value={priority}
           onChange={(e) => setPriority(e.target.value)}
         >
           <MenuItem value="LOW">Low</MenuItem>
@@ -544,12 +552,19 @@ function TaskQuickAdd({ onAdd }) {
         type="submit"
         variant="contained"
         size="small"
-        sx={{ mt: 1 }}
-        fullWidth
+        sx={{
+          mt: 1,
+          textTransform: "none",
+          background: "linear-gradient(135deg, #2563eb, #3b82f6)",
+          "&:hover": {
+            background:
+              "linear-gradient(135deg, #1d4ed8, #2563eb)",
+          },
+        }}
       >
         Add Task
       </Button>
-    </Paper>
+    </Box>
   );
 }
 
