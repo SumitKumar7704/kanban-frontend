@@ -10,8 +10,6 @@ import {
   Grid,
   TextField,
   Typography,
-  ToggleButton,
-  ToggleButtonGroup,
 } from "@mui/material";
 
 import { useNavigate, Link } from "react-router-dom";
@@ -23,41 +21,86 @@ function RegisterPage() {
 
   const [form, setForm] = useState({
     username: "",
+    email: "",
     password: "",
     confirmPassword: "",
     admin: false,
   });
 
-  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleChange = (field) => (e) => {
     const value =
       field === "admin" ? e.target.value === "true" : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
+    // clear field-specific error as user types
+    setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const handleAdminToggle = (event, value) => {
-    if (value === null) return;
-    setForm((prev) => ({ ...prev, admin: value === "true" }));
+  const validate = () => {
+    const newErrors = { username: "", email: "", password: "", confirmPassword: "" };
+    let ok = true;
+
+    // username
+    if (!form.username.trim()) {
+      newErrors.username = "Username is required";
+      ok = false;
+    } else if (form.username.trim().length < 3) {
+      newErrors.username = "Username must be at least 3 characters";
+      ok = false;
+    }
+
+    // email
+    if (!form.email.trim()) {
+      newErrors.email = "Email is required";
+      ok = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      newErrors.email = "Enter a valid email address";
+      ok = false;
+    }
+
+    // password
+    if (!form.password) {
+      newErrors.password = "Password is required";
+      ok = false;
+    } else if (form.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+      ok = false;
+    }
+
+    // confirm password
+    if (!form.confirmPassword) {
+      newErrors.confirmPassword = "Please confirm your password";
+      ok = false;
+    } else if (form.confirmPassword !== form.password) {
+      newErrors.confirmPassword = "Passwords do not match";
+      ok = false;
+    }
+
+    setErrors(newErrors);
+    return ok;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setError("");
 
-    if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
+    if (!validate()) return;
 
     try {
       setLoading(true);
 
       await api.post("/auth/register", {
         username: form.username,
+        email: form.email,
         password: form.password,
         admin: form.admin,
       });
@@ -101,6 +144,21 @@ function RegisterPage() {
                 required
                 margin="normal"
                 autoComplete="username"
+                error={!!errors.username}
+                helperText={errors.username}
+              />
+
+              <TextField
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={handleChange("email")}
+                fullWidth
+                required
+                margin="normal"
+                autoComplete="email"
+                error={!!errors.email}
+                helperText={errors.email}
               />
 
               <TextField
@@ -112,6 +170,8 @@ function RegisterPage() {
                 required
                 margin="normal"
                 autoComplete="new-password"
+                error={!!errors.password}
+                helperText={errors.password}
               />
 
               <TextField
@@ -123,9 +183,9 @@ function RegisterPage() {
                 required
                 margin="normal"
                 autoComplete="new-password"
+                error={!!errors.confirmPassword}
+                helperText={errors.confirmPassword}
               />
-
-              {/* account type text + toggle completely removed, as requested */}
 
               {error && (
                 <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -144,8 +204,7 @@ function RegisterPage() {
               </Box>
 
               <Typography variant="body2" sx={{ mt: 2 }}>
-                Already have an account?{" "}
-                <Link to="/login">Sign in</Link>
+                Already have an account? <Link to="/login">Sign in</Link>
               </Typography>
             </Box>
           </CardContent>

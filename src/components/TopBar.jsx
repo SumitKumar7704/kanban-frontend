@@ -18,7 +18,11 @@ import MenuIcon from "@mui/icons-material/Menu";
 function TopBar() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
-  const username = localStorage.getItem("username") || "User";
+
+  // Prefer username; if missing, fall back to email; otherwise "User"
+  const storedUsername = localStorage.getItem("username");
+  const storedEmail = localStorage.getItem("email");
+  const username = storedUsername || storedEmail || "User";
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -30,6 +34,7 @@ function TopBar() {
     localStorage.removeItem("userId");
     localStorage.removeItem("isAdmin");
     localStorage.removeItem("username");
+    localStorage.removeItem("email");
     localStorage.removeItem("activeUserId");
     navigate("/login", { replace: true });
   };
@@ -53,7 +58,6 @@ function TopBar() {
     setAnchorEl(null);
   };
 
-  // Shared actions as functions so we can reuse in buttons and menu
   const handleBoardsClick = () => {
     handleHome();
     handleMenuClose();
