@@ -15,11 +15,13 @@ import {
 import { useNavigate, Link } from "react-router-dom";
 
 import api from "../api";
+import AvatarPicker from "../components/AvatarPicker";
 
 function RegisterPage() {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
+    name: "",
     username: "",
     email: "",
     password: "",
@@ -28,11 +30,14 @@ function RegisterPage() {
   });
 
   const [errors, setErrors] = useState({
+    name: "",
     username: "",
     email: "",
     password: "",
     confirmPassword: "",
   });
+
+  const [avatarUrl, setAvatarUrl] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -41,13 +46,27 @@ function RegisterPage() {
     const value =
       field === "admin" ? e.target.value === "true" : e.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
-    // clear field-specific error as user types
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const validate = () => {
-    const newErrors = { username: "", email: "", password: "", confirmPassword: "" };
+    const newErrors = {
+      name: "",
+      username: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    };
     let ok = true;
+
+    // name
+    if (!form.name.trim()) {
+      newErrors.name = "Name is required";
+      ok = false;
+    } else if (form.name.trim().length < 2) {
+      newErrors.name = "Name must be at least 2 characters";
+      ok = false;
+    }
 
     // username
     if (!form.username.trim()) {
@@ -99,10 +118,12 @@ function RegisterPage() {
       setLoading(true);
 
       await api.post("/auth/register", {
+        name: form.name,
         username: form.username,
         email: form.email,
         password: form.password,
         admin: form.admin,
+        profilePictureUrl: avatarUrl || null,
       });
 
       navigate("/login");
@@ -136,6 +157,18 @@ function RegisterPage() {
             </Typography>
 
             <Box component="form" onSubmit={handleSubmit} noValidate>
+              <TextField
+                label="Name"
+                value={form.name}
+                onChange={handleChange("name")}
+                fullWidth
+                required
+                margin="normal"
+                autoComplete="name"
+                error={!!errors.name}
+                helperText={errors.name}
+              />
+
               <TextField
                 label="Username"
                 value={form.username}
@@ -185,6 +218,12 @@ function RegisterPage() {
                 autoComplete="new-password"
                 error={!!errors.confirmPassword}
                 helperText={errors.confirmPassword}
+              />
+
+              <AvatarPicker
+                value={avatarUrl}
+                onChange={setAvatarUrl}
+                onUpload={null} // upload will be wired later
               />
 
               {error && (

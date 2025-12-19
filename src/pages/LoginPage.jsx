@@ -48,31 +48,45 @@ function LoginPage() {
     return ok;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError("");
 
-    if (!validate()) return;
+  if (!validate()) return;
 
-    try {
-      setLoading(true);
-      const res = await api.post("/auth/login", { email, password });
-      const { token, userId, isAdmin } = res.data;
+  try {
+    setLoading(true);
+    const res = await api.post("/auth/login", { email, password });
 
-      localStorage.setItem("token", token);
-      localStorage.setItem("userId", userId);
-      localStorage.setItem("isAdmin", isAdmin);
-      localStorage.setItem("email", email);
-      //localStorage.setItem("username", username); 
+    const {
+      token,
+      userId,
+      isAdmin,
+      name,
+      username,
+      email: returnedEmail,
+      profilePictureUrl,
+    } = res.data;
 
-      navigate("/boards");
-    } catch (err) {
-      console.error("login error", err.response || err);
-      setError("Login failed. Check email/password.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Save auth + user info
+    localStorage.setItem("token", token);
+    localStorage.setItem("userId", userId);
+    localStorage.setItem("isAdmin", String(isAdmin));
+    localStorage.setItem("name", name || "");
+    localStorage.setItem("username", username || "");
+    localStorage.setItem("email", returnedEmail || email);
+    localStorage.setItem("profilePictureUrl", profilePictureUrl || "");
+
+    navigate("/boards");
+  } catch (err) {
+    console.error("login error", err.response || err);
+    setError("Login failed. Check email/password.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   return (
     <Box

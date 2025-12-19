@@ -12,6 +12,7 @@ import {
   MenuItem,
   useMediaQuery,
   useTheme,
+  Avatar,            // <-- add
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 
@@ -19,10 +20,17 @@ function TopBar() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // Prefer username; if missing, fall back to email; otherwise "User"
+  const storedName = localStorage.getItem("name");
   const storedUsername = localStorage.getItem("username");
   const storedEmail = localStorage.getItem("email");
-  const username = storedUsername || storedEmail || "User";
+  const profilePictureUrl = localStorage.getItem("profilePictureUrl") || "";
+
+  const displayName = storedName || storedUsername || storedEmail || "User";
+  const initial =
+    (storedName && storedName.trim()[0]) ||
+    (storedUsername && storedUsername.trim()[0]) ||
+    (storedEmail && storedEmail.trim()[0]) ||
+    "U";
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -33,8 +41,10 @@ function TopBar() {
     localStorage.removeItem("token");
     localStorage.removeItem("userId");
     localStorage.removeItem("isAdmin");
+    localStorage.removeItem("name");
     localStorage.removeItem("username");
     localStorage.removeItem("email");
+    localStorage.removeItem("profilePictureUrl");
     localStorage.removeItem("activeUserId");
     navigate("/login", { replace: true });
   };
@@ -127,13 +137,24 @@ function TopBar() {
         {!isMobile && (
           <Stack direction="row" spacing={2.5} alignItems="center">
             {token && (
-              <Typography
-                variant="body1"
-                color="text.secondary"
-                sx={{ fontWeight: 500 }}
-              >
-                Signed in as <strong>{username}</strong>
-              </Typography>
+              <>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Avatar
+                    src={profilePictureUrl || undefined}
+                    alt={displayName}
+                    sx={{ width: 32, height: 32 }}
+                  >
+                    {initial.toUpperCase()}
+                  </Avatar>
+                  <Typography
+                    variant="body1"
+                    color="text.secondary"
+                    sx={{ fontWeight: 500 }}
+                  >
+                    Signed in as <strong>{displayName}</strong>
+                  </Typography>
+                </Stack>
+              </>
             )}
 
             <Button
@@ -192,7 +213,7 @@ function TopBar() {
           </Stack>
         )}
 
-        {/* Mobile hamburger menu */}
+        {/* Mobile menu unchanged; you can add avatar similarly if you want */}
         {isMobile && (
           <>
             <IconButton
@@ -220,7 +241,7 @@ function TopBar() {
               {token && (
                 <MenuItem disabled dense>
                   <Typography variant="body2">
-                    Signed in as <strong>{username}</strong>
+                    Signed in as <strong>{displayName}</strong>
                   </Typography>
                 </MenuItem>
               )}

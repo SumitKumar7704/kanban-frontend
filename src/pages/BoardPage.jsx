@@ -1,32 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import api from "../api";
 import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-} from "@hello-pangea/dnd";
-import {
   Box,
-  Button,
   Card,
   CardContent,
   Typography,
-  TextField,
   Paper,
-  Stack,
-  MenuItem,
-  Select,
-  InputLabel,
-  FormControl,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from "@mui/material";
-
-const STATUSES = ["TODO", "IN_PROGRESS", "DONE"];
+import KanbanBoard from "../components/KanbanBoard";
+import Dialogs from "../components/Dialogs";
+import TaskQuickAdd from "../components/TaskQuickAdd";
 
 const STATUS_COLORS = {
   TODO: {
@@ -52,7 +36,7 @@ function BoardPage() {
   // Which user's board are we viewing? For now, same as logged in or from admin selection
   const activeUserId = localStorage.getItem("activeUserId") || currentUserId;
 
-  const [columns, setColumns] = useState([]); // still load physical columns for tasks
+  const [columns, setColumns] = useState([]); // physical columns from backend
   const [error, setError] = useState("");
 
   // User remark state
@@ -67,9 +51,15 @@ function BoardPage() {
   const [lockDialogMessage, setLockDialogMessage] = useState("");
   const [lockDialogTaskId, setLockDialogTaskId] = useState(null);
   const [lockDialogTargetStatus, setLockDialogTargetStatus] = useState(null);
-  const [overrideRemark, setOverrideRemark] = useState(""); // remark inside dialog
+  const [overrideRemark, setOverrideRemark] = useState("");
 
-  const loadColumns = async () => {
+  // Admin edit/delete dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTask, setDeleteTask] = useState(null);
+
+  const loadColumns = useCallback(async () => {
     if (!activeUserId || !boardId) return;
     try {
       const res = await api.get("/columns", {
@@ -81,7 +71,7 @@ function BoardPage() {
       console.error("load columns error", err.response || err);
       setError("Failed to load columns");
     }
-  };
+  }, [activeUserId, boardId]);
 
   // Admin: create task for activeUserId on this board (backend puts it into TODO)
   const handleCreateTask = async ({
@@ -98,18 +88,17 @@ function BoardPage() {
           title,
           description,
           deadline, // ISO string from datetime-local
-          priority, // backend will default to LOW if this is null
+          priority, // backend defaults to MEDIUM if null
         },
         {
           params: {
             creatorId: currentUserId, // admin id
-            userId: activeUserId, // user whose board this is
+            userId: activeUserId, // board owner
             boardId,
           },
         }
       );
-
-      await loadColumns(); // tasks are still embedded in columns
+      await loadColumns();
     } catch (err) {
       console.error("create task error", err.response || err);
       const raw = err.response?.data;
@@ -128,7 +117,7 @@ function BoardPage() {
     try {
       await api.patch(
         `/tasks/${taskId}`,
-        { status: newStatus, ...extraData }, // status + optional completionRemark
+        { status: newStatus, ...extraData },
         { params: { userId: activeUserId } }
       );
       await loadColumns();
@@ -143,7 +132,6 @@ function BoardPage() {
 
       // When backend says approved+locked
       if (msg.includes("approved and locked by the admin")) {
-        // Admin trying to move back to TODO: show confirm dialog
         if (isAdmin && newStatus === "TODO") {
           setLockDialogTaskId(taskId);
           setLockDialogTargetStatus("TODO");
@@ -154,7 +142,6 @@ function BoardPage() {
           setLockDialogOpen(true);
           setError("");
         } else {
-          // Normal user: simple info dialog
           setLockDialogTaskId(null);
           setLockDialogTargetStatus(null);
           setLockDialogMessage(msg);
@@ -163,7 +150,7 @@ function BoardPage() {
           setError("");
         }
       } else {
-        setError(msg); // WIP limit and other errors still show as red text
+        setError(msg);
       }
     }
   };
@@ -222,7 +209,7 @@ function BoardPage() {
     try {
       await api.patch(
         `/tasks/${taskId}`,
-        { priority: newPriority }, // matches TaskPriority enum
+        { priority: newPriority },
         { params: { userId: activeUserId } }
       );
       await loadColumns();
@@ -247,8 +234,8 @@ function BoardPage() {
         {},
         {
           params: {
-            adminId: currentUserId, // logged-in admin
-            userId: activeUserId, // board owner
+            adminId: currentUserId,
+            userId: activeUserId,
             approved,
             remark,
           },
@@ -269,9 +256,7 @@ function BoardPage() {
 
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
-    // dropped outside
     if (!destination) return;
-    // same position
     if (
       destination.droppableId === source.droppableId &&
       destination.index === source.index
@@ -299,9 +284,80 @@ function BoardPage() {
     }
   };
 
+  // Admin edit helpers
+  const openEditDialog = (task) => {
+    setEditTask({
+      id: task.id,
+      title: task.title || "",
+      description: task.description || "",
+      deadline: task.deadline
+        ? new Date(task.deadline).toISOString().slice(0, 16)
+        : "",
+      priority: task.priority || "MEDIUM",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editTask) return;
+    setError("");
+    try {
+      await api.patch(
+        `/tasks/${editTask.id}`,
+        {
+          title: editTask.title.trim(),
+          description: editTask.description.trim(),
+          deadline: editTask.deadline || null,
+          priority: editTask.priority,
+        },
+        { params: { userId: activeUserId } }
+      );
+      await loadColumns();
+      setEditDialogOpen(false);
+      setEditTask(null);
+    } catch (err) {
+      console.error("edit task error", err.response || err);
+      const raw = err.response?.data;
+      const msg =
+        (typeof raw === "string"
+          ? raw
+          : raw?.message || raw?.error || JSON.stringify(raw)) ||
+        "Failed to update task";
+      setError(msg);
+    }
+  };
+
+  // Admin delete helpers
+  const openDeleteDialog = (task) => {
+    setDeleteTask(task);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTask) return;
+    setError("");
+    try {
+      await api.delete(`/tasks/${deleteTask.id}`, {
+        params: { userId: activeUserId, adminId: currentUserId },
+      });
+      await loadColumns();
+      setDeleteDialogOpen(false);
+      setDeleteTask(null);
+    } catch (err) {
+      console.error("delete task error", err.response || err);
+      const raw = err.response?.data;
+      const msg =
+        (typeof raw === "string"
+          ? raw
+          : raw?.message || raw?.error || JSON.stringify(raw)) ||
+        "Failed to delete task";
+      setError(msg);
+    }
+  };
+
   useEffect(() => {
     loadColumns();
-  }, [activeUserId, boardId]);
+  }, [loadColumns]);
 
   // Flatten tasks from all physical columns
   const allTasks = columns.flatMap((c) => c.tasks || []);
@@ -342,628 +398,84 @@ function BoardPage() {
         </Typography>
       )}
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={2}
-          alignItems="flex-start"
+      {/* Admin-only quick add helper */}
+      {isAdmin && (
+        <Paper
+          sx={{
+            mb: 2,
+            p: 2,
+            borderRadius: 2,
+            borderColor: "rgba(148, 163, 184, 0.5)",
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+          }}
         >
-          {STATUSES.map((status) => (
-            <Droppable droppableId={status} key={status}>
-              {(provided) => (
-                <Paper
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  sx={{
-                    flex: 1,
-                    p: 2,
-                    borderRadius: 3,
-                    backgroundColor: STATUS_COLORS[status].bg,
-                    border: `1px solid ${STATUS_COLORS[status].border}`,
-                    boxShadow: "0 10px 24px rgba(148, 163, 184, 0.35)",
-                  }}
-                >
-                  <Stack
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    sx={{ mb: 1.5 }}
-                  >
-                    <Typography variant="h6">
-                      {statusLabel(status)}
-                    </Typography>
-                    <Chip
-                      label={`${tasksByStatus[status].length} tasks`}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
-                  </Stack>
-
-                  {/* Admin-only quick add always creates TODO tasks (leftmost column) */}
-                  {isAdmin && status === "TODO" && (
-                    <Card
-                      variant="outlined"
-                      sx={{
-                        mb: 2,
-                        borderRadius: 2,
-                        borderColor: "rgba(148, 163, 184, 0.5)",
-                        backgroundColor: "rgba(255, 255, 255, 0.9)",
-                      }}
-                    >
-                      <CardContent sx={{ p: 1.5 }}>
-                        <Typography
-                          variant="subtitle2"
-                          color="text.secondary"
-                          sx={{ mb: 1 }}
-                        >
-                          Quick add task
-                        </Typography>
-                        <TaskQuickAdd onAdd={handleCreateTask} />
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Tasks list for this status */}
-                  {tasksByStatus[status].map((t, index) => (
-                    <Draggable
-                      key={t.id}
-                      draggableId={String(t.id)}
-                      index={index}
-                    >
-                      {(provided) => (
-                        <Card
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          sx={{
-                            mb: 1.5,
-                            borderRadius: 2,
-                            boxShadow:
-                              "0 8px 18px rgba(148, 163, 184, 0.45)",
-                            background:
-                              t.approvedReopened
-                                ? "linear-gradient(135deg, #fef9c3, #fde68a)"
-                                : t.priority === "HIGH"
-                                ? "linear-gradient(135deg, #fee2e2, #fecaca)"
-                                : t.priority === "LOW"
-                                ? "linear-gradient(135deg, #dbeafe, #bfdbfe)"
-                                : "linear-gradient(135deg, #ffedd5, #fed7aa)",
-                            border:
-                              t.approvedReopened
-                                ? "1px solid #eab308"
-                                : t.priority === "HIGH"
-                                ? "1px solid #e11d48"
-                                : t.priority === "LOW"
-                                ? "1px solid #2563eb"
-                                : "1px solid #ea580c",
-                          }}
-                        >
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                mb: 0.5,
-                              }}
-                            >
-                              <Typography
-                                variant="subtitle1"
-                                fontWeight={600}
-                                sx={{ mr: 1 }}
-                              >
-                                {t.title}
-                              </Typography>
-
-                              {/* Priority chip: HIGH=red, MEDIUM=orange, LOW=blue */}
-                              <Chip
-                                label={(t.priority || "MEDIUM").toLowerCase()}
-                                size="medium"
-                                sx={{
-                                  textTransform: "uppercase",
-                                  fontWeight: 700,
-                                  fontSize: "0.7rem",
-                                  px: 1.5,
-                                  py: 0.4,
-                                  borderRadius: 999,
-                                  bgcolor:
-                                    t.priority === "HIGH"
-                                      ? "#fee2e2"
-                                      : t.priority === "LOW"
-                                      ? "#dbeafe"
-                                      : "#ffedd5",
-                                  color:
-                                    t.priority === "HIGH"
-                                      ? "#e20e0e"
-                                      : t.priority === "LOW"
-                                      ? "#1d4ed8"
-                                      : "#c2410c",
-                                  boxShadow:
-                                    "0 0 0 1px rgba(148,163,184,0.4)",
-                                }}
-                              />
-                            </Box>
-
-                            {t.description && (
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                sx={{ mb: 0.5 }}
-                              >
-                                {t.description}
-                              </Typography>
-                            )}
-
-                            <Typography variant="caption" display="block">
-                              Status: {statusLabel(t.status)}
-                            </Typography>
-                            <Typography variant="caption" display="block">
-                              Assigned:{" "}
-                              {t.assignedAt
-                                ? new Date(t.assignedAt).toLocaleString()
-                                : "-"}
-                            </Typography>
-                            <Typography variant="caption" display="block">
-                              Deadline:{" "}
-                              {t.deadline
-                                ? new Date(t.deadline).toLocaleString()
-                                : "-"}
-                            </Typography>
-
-                            {/* completion / reopen remark */}
-                            {t.completionRemark && (
-                              <Typography
-                                variant="caption"
-                                display="block"
-                                color="text.secondary"
-                                sx={{ mt: 0.5 }}
-                              >
-                                {t.approvedReopened
-                                  ? "Task Reopened Reason: "
-                                  : "User remark: "}
-                                {t.completionRemark}
-                              </Typography>
-                            )}
-
-                            {/* extra chip for reopened */}
-                            {t.approvedReopened && (
-                              <Chip
-                                label="Reopened after approval"
-                                color="warning"
-                                size="small"
-                                sx={{ mt: 0.5 }}
-                              />
-                            )}
-
-                            {/* approval chips */}
-                            {t.approvalStatus === "PENDING_REVIEW" && (
-                              <Chip
-                                label="Waiting admin approval"
-                                color="warning"
-                                size="small"
-                                sx={{ mt: 0.5 }}
-                              />
-                            )}
-                            {t.approvalStatus === "APPROVED" && (
-                              <Chip
-                                label="Task completed"
-                                color="success"
-                                size="small"
-                                sx={{ mt: 0.5 }}
-                              />
-                            )}
-                            {t.approvalStatus === "REJECTED" && (
-                              <Chip
-                                label="Completion rejected"
-                                color="error"
-                                size="small"
-                                sx={{ mt: 0.5 }}
-                              />
-                            )}
-
-                            {/* Admin remarks */}
-                            {t.adminApprovalRemark && (
-                              <Typography
-                                variant="caption"
-                                display="block"
-                                color="success.main"
-                                sx={{ mt: 0.5 }}
-                              >
-                                Admin remark: {t.adminApprovalRemark}
-                              </Typography>
-                            )}
-
-                            {t.adminRejectionRemark && (
-                              <Typography
-                                variant="caption"
-                                display="block"
-                                color="error.main"
-                                sx={{ mt: 0.5 }}
-                              >
-                                Admin remark: {t.adminRejectionRemark}
-                              </Typography>
-                            )}
-
-                            {t.approvalStatus === "REJECTED" &&
-                              t.status === "TODO" && (
-                                <Chip
-                                  label="Not accepted by admin as done"
-                                  color="error"
-                                  size="small"
-                                  sx={{ mt: 0.5 }}
-                                />
-                              )}
-
-                            {/* Only the board owner can change status AND only if not approved */}
-                            {activeUserId === currentUserId &&
-                              t.approvalStatus !== "APPROVED" && (
-                                <>
-                                  <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    sx={{ mt: 1 }}
-                                  >
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      onClick={() =>
-                                        handleChangeStatus(t.id, "TODO")
-                                      }
-                                    >
-                                      To Do
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      onClick={() =>
-                                        handleChangeStatus(
-                                          t.id,
-                                          "IN_PROGRESS"
-                                        )
-                                      }
-                                    >
-                                      In Progress
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      onClick={() => {
-                                        setRemarkModeTaskId(t.id);
-                                        setDoneRemark((prev) => ({
-                                          ...prev,
-                                          [t.id]: prev[t.id] || "",
-                                        }));
-                                      }}
-                                    >
-                                      Done
-                                    </Button>
-                                  </Stack>
-
-                                  {/* Remark input when marking DONE */}
-                                  {remarkModeTaskId === t.id && (
-                                    <Box sx={{ mt: 1 }}>
-                                      <TextField
-                                        label="Completion remark (max 20 words)"
-                                        value={doneRemark[t.id] || ""}
-                                        onChange={(e) => {
-                                          const text = e.target.value;
-                                          const words = text
-                                            .trim()
-                                            .split(/\s+/)
-                                            .filter(Boolean);
-                                          if (words.length <= 20) {
-                                            setDoneRemark((prev) => ({
-                                              ...prev,
-                                              [t.id]: text,
-                                            }));
-                                          }
-                                        }}
-                                        fullWidth
-                                        size="small"
-                                        multiline
-                                        minRows={2}
-                                      />
-                                      <Stack
-                                        direction="row"
-                                        spacing={1}
-                                        sx={{ mt: 1 }}
-                                      >
-                                        <Button
-                                          size="small"
-                                          variant="contained"
-                                          onClick={async () => {
-                                            const remark =
-                                              (doneRemark[t.id] || "").trim();
-                                            await handleChangeStatus(
-                                              t.id,
-                                              "DONE",
-                                              {
-                                                completionRemark: remark,
-                                              }
-                                            );
-                                            setRemarkModeTaskId(null);
-                                          }}
-                                        >
-                                          Submit & mark Done
-                                        </Button>
-                                        <Button
-                                          size="small"
-                                          variant="text"
-                                          onClick={() =>
-                                            setRemarkModeTaskId(null)
-                                          }
-                                        >
-                                          Cancel
-                                        </Button>
-                                      </Stack>
-                                    </Box>
-                                  )}
-                                </>
-                              )}
-
-                            {/* Priority dropdown – owner OR admin */}
-                            {(activeUserId === currentUserId || isAdmin) && (
-                              <FormControl
-                                fullWidth
-                                size="small"
-                                sx={{ mt: 1 }}
-                              >
-                                <InputLabel>Priority</InputLabel>
-                                <Select
-                                  label="Priority"
-                                  value={t.priority || "MEDIUM"}
-                                  onChange={(e) =>
-                                    handleChangePriority(
-                                      t.id,
-                                      e.target.value
-                                    )
-                                  }
-                                >
-                                  <MenuItem value="LOW">Low</MenuItem>
-                                  <MenuItem value="MEDIUM">Medium</MenuItem>
-                                  <MenuItem value="HIGH">High</MenuItem>
-                                </Select>
-                              </FormControl>
-                            )}
-
-                            {/* Admin-only Approve/Reject on DONE + pending */}
-                            {isAdmin &&
-                              t.status === "DONE" &&
-                              t.approvalStatus === "PENDING_REVIEW" && (
-                                <Box sx={{ mt: 1 }}>
-                                  <TextField
-                                    label="Admin remark"
-                                    value={adminRemark[t.id] || ""}
-                                    onChange={(e) =>
-                                      setAdminRemark((prev) => ({
-                                        ...prev,
-                                        [t.id]: e.target.value,
-                                      }))
-                                    }
-                                    fullWidth
-                                    size="small"
-                                    multiline
-                                    minRows={2}
-                                  />
-                                  <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    sx={{ mt: 1 }}
-                                  >
-                                    <Button
-                                      size="small"
-                                      variant="contained"
-                                      color="success"
-                                      onClick={() =>
-                                        handleReviewTask(
-                                          t.id,
-                                          true,
-                                          adminRemark[t.id] || ""
-                                        )
-                                      }
-                                    >
-                                      Approve
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      color="error"
-                                      onClick={() =>
-                                        handleReviewTask(
-                                          t.id,
-                                          false,
-                                          adminRemark[t.id] || ""
-                                        )
-                                      }
-                                    >
-                                      Reject
-                                    </Button>
-                                  </Stack>
-                                </Box>
-                              )}
-                          </CardContent>
-                        </Card>
-                      )}
-                    </Draggable>
-                  ))}
-
-                  {tasksByStatus[status].length === 0 && (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mt: 1 }}
-                    >
-                      No tasks in this column.
-                    </Typography>
-                  )}
-
-                  {provided.placeholder}
-                </Paper>
-              )}
-            </Droppable>
-          ))}
-        </Stack>
-      </DragDropContext>
-
-      {/* Dialog: info for user, confirm + remark for admin */}
-      <Dialog
-        open={lockDialogOpen}
-        onClose={() => setLockDialogOpen(false)}
-      >
-        <DialogTitle>
-          {isAdmin && lockDialogTaskId && lockDialogTargetStatus
-            ? "Move approved task?"
-            : "Task is locked"}
-        </DialogTitle>
-        <DialogContent>
-          <Typography
-            variant="body2"
-            sx={{
-              mb:
-                isAdmin && lockDialogTaskId && lockDialogTargetStatus
-                  ? 1
-                  : 0,
-            }}
-          >
-            {lockDialogMessage}
-          </Typography>
-
-          {isAdmin && lockDialogTaskId && lockDialogTargetStatus && (
-            <TextField
-              autoFocus
-              fullWidth
-              size="small"
-              margin="dense"
-              multiline
-              minRows={2}
-              label="Task reopen reason (max 20 words)"
-              value={overrideRemark}
-              onChange={(e) => {
-                const text = e.target.value;
-                const words = text.trim().split(/\s+/).filter(Boolean);
-                if (words.length <= 20) {
-                  setOverrideRemark(text);
-                }
-              }}
-            />
-          )}
-        </DialogContent>
-        <DialogActions>
-          {isAdmin && lockDialogTaskId && lockDialogTargetStatus ? (
-            <>
-              <Button onClick={() => setLockDialogOpen(false)}>No</Button>
-              <Button
-                onClick={handleLockDialogConfirm}
-                color="primary"
-                variant="contained"
-                autoFocus
+          <Card variant="outlined" sx={{ borderRadius: 2 }}>
+            <CardContent sx={{ p: 1.5 }}>
+              <Typography
+                variant="subtitle2"
+                color="text.secondary"
+                sx={{ mb: 1 }}
               >
-                Yes
-              </Button>
-            </>
-          ) : (
-            <Button onClick={() => setLockDialogOpen(false)} autoFocus>
-              OK
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
-}
+                Quick add task (TODO)
+              </Typography>
+              <TaskQuickAdd onAdd={handleCreateTask} />
+            </CardContent>
+          </Card>
+        </Paper>
+      )}
 
-// small inline component for admin to add tasks (title + description + deadline + priority)
-function TaskQuickAdd({ onAdd }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [priority, setPriority] = useState("LOW"); // default LOW in UI
-
-  const now = new Date().toISOString().slice(0, 16);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!title.trim() || !description.trim() || !deadline) return;
-
-    onAdd({
-      title: title.trim(),
-      description: description.trim(),
-      deadline,
-      priority,
-    });
-
-    setTitle("");
-    setDescription("");
-    setDeadline("");
-    setPriority("LOW");
-  };
-
-  return (
-    <Box component="form" onSubmit={handleSubmit} noValidate>
-      <TextField
-        label="Title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        fullWidth
-        size="small"
-        margin="dense"
-        required
+      {/* Board + drag-and-drop */}
+      <KanbanBoard
+        tasksByStatus={tasksByStatus}
+        statusLabel={statusLabel}
+        statusColors={STATUS_COLORS}
+        isAdmin={isAdmin}
+        currentUserId={currentUserId}
+        activeUserId={activeUserId}
+        onDragEnd={handleDragEnd}
+        doneRemark={doneRemark}
+        remarkModeTaskId={remarkModeTaskId}
+        setRemarkModeTaskId={setRemarkModeTaskId}
+        setDoneRemark={setDoneRemark}
+        adminRemark={adminRemark}
+        setAdminRemark={setAdminRemark}
+        onStatusChange={handleChangeStatus}
+        onPriorityChange={handleChangePriority}
+        onReview={handleReviewTask}
+        onEditClick={openEditDialog}
+        onDeleteClick={openDeleteDialog}
       />
 
-      <TextField
-        label="Description"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        fullWidth
-        size="small"
-        margin="dense"
-        required
-      />
-
-      <TextField
-        label="Deadline"
-        type="datetime-local"
-        value={deadline}
-        onChange={(e) => setDeadline(e.target.value)}
-        fullWidth
-        size="small"
-        margin="dense"
-        required
-        InputLabelProps={{ shrink: true }}
-        inputProps={{
-          min: now,
+      {/* All dialogs in a single component */}
+      <Dialogs
+        // lock dialog
+        isAdmin={isAdmin}
+        lockDialogOpen={lockDialogOpen}
+        lockDialogMessage={lockDialogMessage}
+        lockDialogTaskId={lockDialogTaskId}
+        lockDialogTargetStatus={lockDialogTargetStatus}
+        overrideRemark={overrideRemark}
+        setOverrideRemark={setOverrideRemark}
+        onLockClose={() => setLockDialogOpen(false)}
+        onLockConfirm={handleLockDialogConfirm}
+        // edit dialog
+        editDialogOpen={editDialogOpen}
+        editTask={editTask}
+        setEditTask={setEditTask}
+        onEditCancel={() => {
+          setEditDialogOpen(false);
+          setEditTask(null);
         }}
-      />
-
-      <FormControl fullWidth size="small" margin="dense">
-        <InputLabel>Priority</InputLabel>
-        <Select
-          label="Priority"
-          value={priority}
-          onChange={(e) => setPriority(e.target.value)}
-        >
-          <MenuItem value="LOW">Low</MenuItem>
-          <MenuItem value="MEDIUM">Medium</MenuItem>
-          <MenuItem value="HIGH">High</MenuItem>
-        </Select>
-      </FormControl>
-
-      <Button
-        type="submit"
-        variant="contained"
-        size="small"
-        sx={{
-          mt: 1,
-          textTransform: "none",
-          background: "linear-gradient(135deg, #2563eb, #3b82f6)",
-          "&:hover": {
-            background: "linear-gradient(135deg, #1d4ed8, #2563eb)",
-          },
+        onEditSave={handleEditSave}
+        // delete dialog
+        deleteDialogOpen={deleteDialogOpen}
+        deleteTask={deleteTask}
+        onDeleteCancel={() => {
+          setDeleteDialogOpen(false);
+          setDeleteTask(null);
         }}
-      >
-        Add Task
-      </Button>
+        onDeleteConfirm={handleDeleteConfirm}
+      />
     </Box>
   );
 }
