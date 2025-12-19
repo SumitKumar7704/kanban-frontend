@@ -20,6 +20,10 @@ import {
   InputLabel,
   FormControl,
   Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "DONE"];
@@ -50,6 +54,20 @@ function BoardPage() {
 
   const [columns, setColumns] = useState([]); // still load physical columns for tasks
   const [error, setError] = useState("");
+
+  // User remark state
+  const [doneRemark, setDoneRemark] = useState({});
+  const [remarkModeTaskId, setRemarkModeTaskId] = useState(null);
+
+  // Admin remark state
+  const [adminRemark, setAdminRemark] = useState({});
+
+  // Dialog state for lock / override
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
+  const [lockDialogMessage, setLockDialogMessage] = useState("");
+  const [lockDialogTaskId, setLockDialogTaskId] = useState(null);
+  const [lockDialogTargetStatus, setLockDialogTargetStatus] = useState(null);
+  const [overrideRemark, setOverrideRemark] = useState(""); // remark inside dialog
 
   const loadColumns = async () => {
     if (!activeUserId || !boardId) return;
@@ -105,12 +123,12 @@ function BoardPage() {
   };
 
   // User: change task status (WIP check enforced backend)
-  const handleChangeStatus = async (taskId, newStatus) => {
+  const handleChangeStatus = async (taskId, newStatus, extraData = {}) => {
     setError("");
     try {
       await api.patch(
         `/tasks/${taskId}`,
-        { status: newStatus }, // ONLY status – priority untouched
+        { status: newStatus, ...extraData }, // status + optional completionRemark
         { params: { userId: activeUserId } }
       );
       await loadColumns();
@@ -122,7 +140,79 @@ function BoardPage() {
           ? raw
           : raw?.message || raw?.error || JSON.stringify(raw)) ||
         "Failed to update task";
-      setError(msg); // will show WIP limit error here
+
+      // When backend says approved+locked
+      if (msg.includes("approved and locked by the admin")) {
+        // Admin trying to move back to TODO: show confirm dialog
+        if (isAdmin && newStatus === "TODO") {
+          setLockDialogTaskId(taskId);
+          setLockDialogTargetStatus("TODO");
+          setLockDialogMessage(
+            "You have already marked this task as done. Do you still want to move this task to TODO?"
+          );
+          setOverrideRemark("");
+          setLockDialogOpen(true);
+          setError("");
+        } else {
+          // Normal user: simple info dialog
+          setLockDialogTaskId(null);
+          setLockDialogTargetStatus(null);
+          setLockDialogMessage(msg);
+          setOverrideRemark("");
+          setLockDialogOpen(true);
+          setError("");
+        }
+      } else {
+        setError(msg); // WIP limit and other errors still show as red text
+      }
+    }
+  };
+
+  // Admin confirm: override approved lock and move to TODO with 20-word remark
+  const handleLockDialogConfirm = async () => {
+    if (!lockDialogTaskId || !lockDialogTargetStatus) {
+      setLockDialogOpen(false);
+      return;
+    }
+
+    const remark = (overrideRemark || "").trim();
+    let finalRemark = remark;
+    if (remark.length > 0) {
+      const words = remark.split(/\s+/).filter(Boolean);
+      if (words.length > 20) {
+        finalRemark = words.slice(0, 20).join(" ");
+      }
+    }
+
+    try {
+      await api.patch(
+        `/tasks/${lockDialogTaskId}/override-status`,
+        {
+          status: lockDialogTargetStatus,
+          completionRemark: finalRemark || undefined,
+        },
+        {
+          params: {
+            adminId: currentUserId,
+            userId: activeUserId,
+          },
+        }
+      );
+      await loadColumns();
+    } catch (err) {
+      console.error("override status error", err.response || err);
+      const raw = err.response?.data;
+      const msg =
+        (typeof raw === "string"
+          ? raw
+          : raw?.message || raw?.error || JSON.stringify(raw)) ||
+        "Failed to move task";
+      setError(msg);
+    } finally {
+      setLockDialogOpen(false);
+      setLockDialogTaskId(null);
+      setLockDialogTargetStatus(null);
+      setOverrideRemark("");
     }
   };
 
@@ -148,6 +238,35 @@ function BoardPage() {
     }
   };
 
+  // Admin review (approve / reject) with remark
+  const handleReviewTask = async (taskId, approved, remark) => {
+    setError("");
+    try {
+      await api.patch(
+        `/tasks/${taskId}/review`,
+        {},
+        {
+          params: {
+            adminId: currentUserId, // logged-in admin
+            userId: activeUserId, // board owner
+            approved,
+            remark,
+          },
+        }
+      );
+      await loadColumns();
+    } catch (err) {
+      console.error("review task error", err.response || err);
+      const raw = err.response?.data;
+      const msg =
+        (typeof raw === "string"
+          ? raw
+          : raw?.message || raw?.error || JSON.stringify(raw)) ||
+        "Failed to review task";
+      setError(msg);
+    }
+  };
+
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
     // dropped outside
@@ -159,6 +278,20 @@ function BoardPage() {
     ) {
       return;
     }
+
+    // If dragged into DONE by owner, open remark mode instead of immediate update
+    if (
+      destination.droppableId === "DONE" &&
+      activeUserId === currentUserId
+    ) {
+      setRemarkModeTaskId(draggableId);
+      setDoneRemark((prev) => ({
+        ...prev,
+        [draggableId]: prev[draggableId] || "",
+      }));
+      return;
+    }
+
     try {
       await handleChangeStatus(draggableId, destination.droppableId);
     } catch (err) {
@@ -168,7 +301,6 @@ function BoardPage() {
 
   useEffect(() => {
     loadColumns();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUserId, boardId]);
 
   // Flatten tasks from all physical columns
@@ -290,13 +422,17 @@ function BoardPage() {
                             boxShadow:
                               "0 8px 18px rgba(148, 163, 184, 0.45)",
                             background:
-                              t.priority === "HIGH"
+                              t.approvedReopened
+                                ? "linear-gradient(135deg, #fef9c3, #fde68a)"
+                                : t.priority === "HIGH"
                                 ? "linear-gradient(135deg, #fee2e2, #fecaca)"
                                 : t.priority === "LOW"
                                 ? "linear-gradient(135deg, #dbeafe, #bfdbfe)"
                                 : "linear-gradient(135deg, #ffedd5, #fed7aa)",
                             border:
-                              t.priority === "HIGH"
+                              t.approvedReopened
+                                ? "1px solid #eab308"
+                                : t.priority === "HIGH"
                                 ? "1px solid #e11d48"
                                 : t.priority === "LOW"
                                 ? "1px solid #2563eb"
@@ -333,16 +469,16 @@ function BoardPage() {
                                   borderRadius: 999,
                                   bgcolor:
                                     t.priority === "HIGH"
-                                      ? "#fee2e2" // light red bg
+                                      ? "#fee2e2"
                                       : t.priority === "LOW"
-                                      ? "#dbeafe" // light blue bg
-                                      : "#ffedd5", // light orange bg
+                                      ? "#dbeafe"
+                                      : "#ffedd5",
                                   color:
                                     t.priority === "HIGH"
-                                      ? "#e20e0e" // red
+                                      ? "#e20e0e"
                                       : t.priority === "LOW"
-                                      ? "#1d4ed8" // blue
-                                      : "#c2410c", // orange
+                                      ? "#1d4ed8"
+                                      : "#c2410c",
                                   boxShadow:
                                     "0 0 0 1px rgba(148,163,184,0.4)",
                                 }}
@@ -365,86 +501,287 @@ function BoardPage() {
                             <Typography variant="caption" display="block">
                               Assigned:{" "}
                               {t.assignedAt
-                                ? new Date(
-                                    t.assignedAt
-                                  ).toLocaleString()
+                                ? new Date(t.assignedAt).toLocaleString()
                                 : "-"}
                             </Typography>
                             <Typography variant="caption" display="block">
                               Deadline:{" "}
                               {t.deadline
-                                ? new Date(
-                                    t.deadline
-                                  ).toLocaleString()
+                                ? new Date(t.deadline).toLocaleString()
                                 : "-"}
                             </Typography>
 
-                            {/* Only the board owner can change status */}
-                            {activeUserId === currentUserId && (
-                              <>
-                                <Stack
-                                  direction="row"
-                                  spacing={1}
-                                  sx={{ mt: 1 }}
-                                >
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() =>
-                                      handleChangeStatus(t.id, "TODO")
-                                    }
-                                  >
-                                    To Do
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() =>
-                                      handleChangeStatus(
-                                        t.id,
-                                        "IN_PROGRESS"
-                                      )
-                                    }
-                                  >
-                                    In Progress
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() =>
-                                      handleChangeStatus(t.id, "DONE")
-                                    }
-                                  >
-                                    Done
-                                  </Button>
-                                </Stack>
-
-                                {/* Priority dropdown: user/admin explicitly changes priority */}
-                                <FormControl
-                                  fullWidth
-                                  size="small"
-                                  sx={{ mt: 1 }}
-                                >
-                                  <InputLabel>Priority</InputLabel>
-                                  <Select
-                                    label="Priority"
-                                    value={t.priority || "MEDIUM"}
-                                    onChange={(e) =>
-                                      handleChangePriority(
-                                        t.id,
-                                        e.target.value
-                                      )
-                                    }
-                                  >
-                                    <MenuItem value="LOW">Low</MenuItem>
-                                    <MenuItem value="MEDIUM">
-                                      Medium
-                                    </MenuItem>
-                                    <MenuItem value="HIGH">High</MenuItem>
-                                  </Select>
-                                </FormControl>
-                              </>
+                            {/* completion / reopen remark */}
+                            {t.completionRemark && (
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                color="text.secondary"
+                                sx={{ mt: 0.5 }}
+                              >
+                                {t.approvedReopened
+                                  ? "Task Reopened Reason: "
+                                  : "User remark: "}
+                                {t.completionRemark}
+                              </Typography>
                             )}
+
+                            {/* extra chip for reopened */}
+                            {t.approvedReopened && (
+                              <Chip
+                                label="Reopened after approval"
+                                color="warning"
+                                size="small"
+                                sx={{ mt: 0.5 }}
+                              />
+                            )}
+
+                            {/* approval chips */}
+                            {t.approvalStatus === "PENDING_REVIEW" && (
+                              <Chip
+                                label="Waiting admin approval"
+                                color="warning"
+                                size="small"
+                                sx={{ mt: 0.5 }}
+                              />
+                            )}
+                            {t.approvalStatus === "APPROVED" && (
+                              <Chip
+                                label="Task completed"
+                                color="success"
+                                size="small"
+                                sx={{ mt: 0.5 }}
+                              />
+                            )}
+                            {t.approvalStatus === "REJECTED" && (
+                              <Chip
+                                label="Completion rejected"
+                                color="error"
+                                size="small"
+                                sx={{ mt: 0.5 }}
+                              />
+                            )}
+
+                            {/* Admin remarks */}
+                            {t.adminApprovalRemark && (
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                color="success.main"
+                                sx={{ mt: 0.5 }}
+                              >
+                                Admin remark: {t.adminApprovalRemark}
+                              </Typography>
+                            )}
+
+                            {t.adminRejectionRemark && (
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                color="error.main"
+                                sx={{ mt: 0.5 }}
+                              >
+                                Admin remark: {t.adminRejectionRemark}
+                              </Typography>
+                            )}
+
+                            {t.approvalStatus === "REJECTED" &&
+                              t.status === "TODO" && (
+                                <Chip
+                                  label="Not accepted by admin as done"
+                                  color="error"
+                                  size="small"
+                                  sx={{ mt: 0.5 }}
+                                />
+                              )}
+
+                            {/* Only the board owner can change status AND only if not approved */}
+                            {activeUserId === currentUserId &&
+                              t.approvalStatus !== "APPROVED" && (
+                                <>
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ mt: 1 }}
+                                  >
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() =>
+                                        handleChangeStatus(t.id, "TODO")
+                                      }
+                                    >
+                                      To Do
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() =>
+                                        handleChangeStatus(
+                                          t.id,
+                                          "IN_PROGRESS"
+                                        )
+                                      }
+                                    >
+                                      In Progress
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() => {
+                                        setRemarkModeTaskId(t.id);
+                                        setDoneRemark((prev) => ({
+                                          ...prev,
+                                          [t.id]: prev[t.id] || "",
+                                        }));
+                                      }}
+                                    >
+                                      Done
+                                    </Button>
+                                  </Stack>
+
+                                  {/* Remark input when marking DONE */}
+                                  {remarkModeTaskId === t.id && (
+                                    <Box sx={{ mt: 1 }}>
+                                      <TextField
+                                        label="Completion remark (max 20 words)"
+                                        value={doneRemark[t.id] || ""}
+                                        onChange={(e) => {
+                                          const text = e.target.value;
+                                          const words = text
+                                            .trim()
+                                            .split(/\s+/)
+                                            .filter(Boolean);
+                                          if (words.length <= 20) {
+                                            setDoneRemark((prev) => ({
+                                              ...prev,
+                                              [t.id]: text,
+                                            }));
+                                          }
+                                        }}
+                                        fullWidth
+                                        size="small"
+                                        multiline
+                                        minRows={2}
+                                      />
+                                      <Stack
+                                        direction="row"
+                                        spacing={1}
+                                        sx={{ mt: 1 }}
+                                      >
+                                        <Button
+                                          size="small"
+                                          variant="contained"
+                                          onClick={async () => {
+                                            const remark =
+                                              (doneRemark[t.id] || "").trim();
+                                            await handleChangeStatus(
+                                              t.id,
+                                              "DONE",
+                                              {
+                                                completionRemark: remark,
+                                              }
+                                            );
+                                            setRemarkModeTaskId(null);
+                                          }}
+                                        >
+                                          Submit & mark Done
+                                        </Button>
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          onClick={() =>
+                                            setRemarkModeTaskId(null)
+                                          }
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </Stack>
+                                    </Box>
+                                  )}
+                                </>
+                              )}
+
+                            {/* Priority dropdown – owner OR admin */}
+                            {(activeUserId === currentUserId || isAdmin) && (
+                              <FormControl
+                                fullWidth
+                                size="small"
+                                sx={{ mt: 1 }}
+                              >
+                                <InputLabel>Priority</InputLabel>
+                                <Select
+                                  label="Priority"
+                                  value={t.priority || "MEDIUM"}
+                                  onChange={(e) =>
+                                    handleChangePriority(
+                                      t.id,
+                                      e.target.value
+                                    )
+                                  }
+                                >
+                                  <MenuItem value="LOW">Low</MenuItem>
+                                  <MenuItem value="MEDIUM">Medium</MenuItem>
+                                  <MenuItem value="HIGH">High</MenuItem>
+                                </Select>
+                              </FormControl>
+                            )}
+
+                            {/* Admin-only Approve/Reject on DONE + pending */}
+                            {isAdmin &&
+                              t.status === "DONE" &&
+                              t.approvalStatus === "PENDING_REVIEW" && (
+                                <Box sx={{ mt: 1 }}>
+                                  <TextField
+                                    label="Admin remark"
+                                    value={adminRemark[t.id] || ""}
+                                    onChange={(e) =>
+                                      setAdminRemark((prev) => ({
+                                        ...prev,
+                                        [t.id]: e.target.value,
+                                      }))
+                                    }
+                                    fullWidth
+                                    size="small"
+                                    multiline
+                                    minRows={2}
+                                  />
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ mt: 1 }}
+                                  >
+                                    <Button
+                                      size="small"
+                                      variant="contained"
+                                      color="success"
+                                      onClick={() =>
+                                        handleReviewTask(
+                                          t.id,
+                                          true,
+                                          adminRemark[t.id] || ""
+                                        )
+                                      }
+                                    >
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      color="error"
+                                      onClick={() =>
+                                        handleReviewTask(
+                                          t.id,
+                                          false,
+                                          adminRemark[t.id] || ""
+                                        )
+                                      }
+                                    >
+                                      Reject
+                                    </Button>
+                                  </Stack>
+                                </Box>
+                              )}
                           </CardContent>
                         </Card>
                       )}
@@ -468,6 +805,70 @@ function BoardPage() {
           ))}
         </Stack>
       </DragDropContext>
+
+      {/* Dialog: info for user, confirm + remark for admin */}
+      <Dialog
+        open={lockDialogOpen}
+        onClose={() => setLockDialogOpen(false)}
+      >
+        <DialogTitle>
+          {isAdmin && lockDialogTaskId && lockDialogTargetStatus
+            ? "Move approved task?"
+            : "Task is locked"}
+        </DialogTitle>
+        <DialogContent>
+          <Typography
+            variant="body2"
+            sx={{
+              mb:
+                isAdmin && lockDialogTaskId && lockDialogTargetStatus
+                  ? 1
+                  : 0,
+            }}
+          >
+            {lockDialogMessage}
+          </Typography>
+
+          {isAdmin && lockDialogTaskId && lockDialogTargetStatus && (
+            <TextField
+              autoFocus
+              fullWidth
+              size="small"
+              margin="dense"
+              multiline
+              minRows={2}
+              label="Task reopen reason (max 20 words)"
+              value={overrideRemark}
+              onChange={(e) => {
+                const text = e.target.value;
+                const words = text.trim().split(/\s+/).filter(Boolean);
+                if (words.length <= 20) {
+                  setOverrideRemark(text);
+                }
+              }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          {isAdmin && lockDialogTaskId && lockDialogTargetStatus ? (
+            <>
+              <Button onClick={() => setLockDialogOpen(false)}>No</Button>
+              <Button
+                onClick={handleLockDialogConfirm}
+                color="primary"
+                variant="contained"
+                autoFocus
+              >
+                Yes
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => setLockDialogOpen(false)} autoFocus>
+              OK
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -489,13 +890,13 @@ function TaskQuickAdd({ onAdd }) {
       title: title.trim(),
       description: description.trim(),
       deadline,
-      priority, // will be LOW by default if admin does nothing
+      priority,
     });
 
     setTitle("");
     setDescription("");
     setDeadline("");
-    setPriority("LOW"); // reset to LOW
+    setPriority("LOW");
   };
 
   return (
@@ -557,8 +958,7 @@ function TaskQuickAdd({ onAdd }) {
           textTransform: "none",
           background: "linear-gradient(135deg, #2563eb, #3b82f6)",
           "&:hover": {
-            background:
-              "linear-gradient(135deg, #1d4ed8, #2563eb)",
+            background: "linear-gradient(135deg, #1d4ed8, #2563eb)",
           },
         }}
       >
