@@ -5,12 +5,15 @@ import {
   Typography,
   Box,
   Button,
+  Chip,
 } from "@mui/material";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 
 function TopBar() {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
   const username = localStorage.getItem("username") || "User";
+  const isAdmin = localStorage.getItem("isAdmin") === "true";
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -26,17 +29,34 @@ function TopBar() {
   };
 
   return (
-    <AppBar position="static" color="primary" elevation={1}>
-      <Toolbar sx={{ minHeight: 64 }}>
-        <Typography
-          variant="h6"
-          component="div"
-          sx={{ flexGrow: 1, fontWeight: 600, cursor: "pointer" }}
-          onClick={() => navigate("/boards")}
-        >
-          Kanban Board
-        </Typography>
+    <AppBar
+  position="static"
+  sx={{
+    background: 'linear-gradient(90deg, #2196F3, #21CBF3)',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+  }}
+>
+  <Toolbar sx={{ minHeight: 64 }}>
+    <Typography
+      variant="h6"
+      sx={{ flexGrow: 1, fontWeight: 700, letterSpacing: 1.2, cursor: "pointer" }}
+      onClick={() => navigate("/boards")}
+    >
+      Kanban Board
+    </Typography>
 
+    {token && (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {isAdmin && (
+          <Chip
+            icon={<AdminPanelSettingsIcon />}
+            label="Admin"
+            color="secondary"
+            size="small"
+            sx={{ fontWeight: 600 }}
+          />
+        )}
+        {/* Signed in info */}
         {token && (
           <Box sx={{ mr: 2 }}>
             <Typography variant="body2">
@@ -44,30 +64,20 @@ function TopBar() {
             </Typography>
           </Box>
         )}
+        <Button
+          color="inherit"
+          variant="outlined"
+          size="small"
+          sx={{ textTransform: "none", borderRadius: 999 }}
+          onClick={handleLogout}
+        >
+          Logout
+        </Button>
+      </Box>
+    )}
+  </Toolbar>
+</AppBar>
 
-        {token ? (
-          <Button
-            color="inherit"
-            variant="outlined"
-            size="small"
-            sx={{ textTransform: "none", borderRadius: 999 }}
-            onClick={handleLogout}
-          >
-            Logout
-          </Button>
-        ) : (
-          <Button
-            color="inherit"
-            variant="outlined"
-            size="small"
-            sx={{ textTransform: "none", borderRadius: 999 }}
-            onClick={handleLogin}
-          >
-            Login
-          </Button>
-        )}
-      </Toolbar>
-    </AppBar>
   );
 }
 
