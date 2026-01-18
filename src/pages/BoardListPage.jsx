@@ -98,11 +98,13 @@ function BoardListPage() {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
-        bgcolor: "grey.100",
-        py: 6,
-        px: 2,
-      }}
+    minHeight: "100vh",
+    background: "linear-gradient(135deg, #E4ECF5 25%, #ADD8E6 100%)",
+    backgroundAttachment: "fixed",
+    py: 4,
+    display: "flex",
+    justifyContent: "center",
+  }}
     >
       <Card
         elevation={3}

@@ -225,7 +225,8 @@ const handlePageChange = (status, newPage) => {
     <Box
   sx={{
     minHeight: "100vh",
-    bgcolor: "grey.100",
+    background: "linear-gradient(135deg, #E4ECF5 25%, #ADD8E6 100%)",
+    backgroundAttachment: "fixed",
     py: 4,
     display: "flex",
     justifyContent: "center",
